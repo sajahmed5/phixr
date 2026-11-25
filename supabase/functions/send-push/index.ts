@@ -18,21 +18,40 @@ import { reportError, withSentry } from '../_shared/sentry.ts';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
-// notification type → preference category. 'moderation' has no toggle (always sent).
+// notification type → preference category (Part 15: every type has one).
+// 'moderation' and 'new_login' have no toggle — always sent.
 const CATEGORY: Record<string, string | null> = {
-  new_follower: 'follows',
-  follow_accepted: 'follows',
-  follow_request: 'requests',
+  like: 'likes',
   comment: 'comments',
   reply: 'comments',
   comment_reaction: 'reactions',
+  mention: 'mentions',
+  new_follower: 'follows',
+  follow_accepted: 'follows',
+  follow_request: 'requests',
   reach_milestone: 'reach',
   message: 'messages',
-  mention: 'comments',
+  schedule_update: 'posts',
+  collab_invite: 'posts',
+  collab_update: 'posts',
+  partnership_request: 'business',
+  partnership_update: 'business',
+  team_invite: 'business',
+  creator_digest: 'digest',
   moderation: null,
   new_login: null, // security: always delivered, even in quiet hours
-  team_invite: null,
 };
+
+// Prefs are tri-state: 'on' | 'off' | 'follows' (legacy true/false = on/off).
+type PrefValue = boolean | string | undefined;
+function prefMode(v: PrefValue): 'on' | 'off' | 'follows' {
+  if (v === false || v === 'off' || v === 'false') return 'off';
+  if (v === 'follows') return 'follows';
+  return 'on';
+}
+
+// Types that NEVER count against (or get held by) the daily push cap.
+const CAP_EXEMPT = new Set(['message', 'new_login', 'moderation']);
 
 type Notification = {
   id: string; user_id: string; type: string; actor_id: string | null;
@@ -63,12 +82,23 @@ Deno.serve(withSentry('send-push', async (req) => {
   const { data: notif } = await svc.from('notifications').select('*').eq('id', notificationId).single<Notification>();
   if (!notif) return json({ skipped: 'not_found' });
 
-  // ---- server-side preference enforcement ----
+  // ---- server-side preference enforcement (Part 15: tri-state) ----
   const category = CATEGORY[notif.type];
   if (category) {
     const { data: pref } = await svc.from('notification_prefs').select('prefs').eq('user_id', notif.user_id).maybeSingle();
-    const prefs = (pref?.prefs ?? {}) as Record<string, boolean>;
-    if (prefs[category] === false) return json({ skipped: 'category_disabled' });
+    const prefs = (pref?.prefs ?? {}) as Record<string, PrefValue>;
+    const mode = prefMode(prefs[category]);
+    if (mode === 'off') return json({ skipped: 'category_disabled' });
+    if (mode === 'follows' && notif.actor_id) {
+      const { data: follows } = await svc
+        .from('follows')
+        .select('followee_id')
+        .eq('follower_id', notif.user_id)
+        .eq('followee_id', notif.actor_id)
+        .eq('status', 'accepted')
+        .maybeSingle();
+      if (!follows) return json({ skipped: 'not_followed' });
+    }
   }
 
   // Part 14D: quiet mode — routine pushes hold during the user's quiet hours.
@@ -76,6 +106,19 @@ Deno.serve(withSentry('send-push', async (req) => {
   if (notif.type !== 'new_login') {
     const { data: quiet } = await svc.rpc('_in_quiet_hours', { _uid: notif.user_id });
     if (quiet === true) return json({ skipped: 'quiet_hours' });
+  }
+
+  // ---- daily push cap (Part 15): DMs, security and moderation are exempt;
+  // the in-app activity feed still gets everything — only pushes are held ----
+  if (!CAP_EXEMPT.has(notif.type)) {
+    const { data: capRow } = await svc
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'push_daily_cap')
+      .maybeSingle();
+    const cap = Number(capRow?.value ?? 15) || 15;
+    const { data: count } = await svc.rpc('_bump_push_count', { _uid: notif.user_id });
+    if (typeof count === 'number' && count > cap) return json({ skipped: 'daily_cap' });
   }
 
   // ---- recipient's device tokens + badge ----
@@ -171,6 +214,10 @@ function compose(n: Notification, actor: string): { title: string; body: string 
     case 'team_invite': return {
       title: 'Team invite',
       body: `${at} invited you to help run their business (${String(n.payload.role ?? 'team')})`,
+    };
+    case 'creator_digest': return {
+      title: 'Your week on Phixr',
+      body: `Your posts got ${fmt(n.payload.views)} views this week${n.payload.like_pct != null ? `, ${n.payload.like_pct}% liked` : ''}. See your dashboard →`,
     };
     default: return { title: 'Phixr', body: 'You have a new notification' };
   }

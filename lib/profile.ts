@@ -568,22 +568,40 @@ export async function getActiveDevices(): Promise<{ id: string; platform: string
   return (data ?? []).map((d) => ({ id: d.token as string, platform: (d.platform as string) ?? 'device', last_seen: d.updated_at as string }));
 }
 
+/** Part 15: tri-state per-type preference — enforced SERVER-SIDE in send-push. */
+export type PrefMode = 'on' | 'off' | 'follows';
 export type NotificationPrefs = {
-  follows: boolean;
-  requests: boolean;
-  comments: boolean;
-  reactions: boolean;
-  reach: boolean;
-  messages: boolean;
+  likes: PrefMode;
+  comments: PrefMode;
+  reactions: PrefMode;
+  mentions: PrefMode;
+  follows: PrefMode;
+  requests: PrefMode;
+  reach: PrefMode;
+  messages: PrefMode;
+  posts: PrefMode;
+  business: PrefMode;
+  digest: PrefMode;
 };
 const DEFAULT_PREFS: NotificationPrefs = {
-  follows: true,
-  requests: true,
-  comments: true,
-  reactions: true,
-  reach: true,
-  messages: true,
+  likes: 'on',
+  comments: 'on',
+  reactions: 'on',
+  mentions: 'on',
+  follows: 'on',
+  requests: 'on',
+  reach: 'on',
+  messages: 'on',
+  posts: 'on',
+  business: 'on',
+  digest: 'on',
 };
+
+function normalizePref(v: unknown): PrefMode {
+  if (v === false || v === 'off' || v === 'false') return 'off';
+  if (v === 'follows') return 'follows';
+  return 'on'; // legacy true / missing / anything else
+}
 
 export async function getNotificationPrefs(): Promise<NotificationPrefs> {
   const { data: u } = await supabase.auth.getUser();
@@ -592,7 +610,12 @@ export async function getNotificationPrefs(): Promise<NotificationPrefs> {
     .select('prefs')
     .eq('user_id', u.user!.id)
     .maybeSingle();
-  return { ...DEFAULT_PREFS, ...((data?.prefs as Partial<NotificationPrefs>) ?? {}) };
+  const raw = (data?.prefs as Record<string, unknown> | null) ?? {};
+  const out = { ...DEFAULT_PREFS };
+  for (const key of Object.keys(out) as (keyof NotificationPrefs)[]) {
+    if (key in raw) out[key] = normalizePref(raw[key]);
+  }
+  return out;
 }
 
 export async function setNotificationPrefs(prefs: NotificationPrefs): Promise<void> {

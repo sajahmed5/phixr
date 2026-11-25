@@ -34,6 +34,7 @@ import {
   setPrivacy,
   setSearchRadius,
   type NotificationPrefs,
+  type PrefMode,
 } from '@/lib/profile';
 
 const RADII = [1, 5, 10, 25, 50];
@@ -116,7 +117,8 @@ export default function SettingsScreen() {
       /* keep optimistic */
     }
   }
-  async function togglePref(key: keyof NotificationPrefs, v: boolean) {
+  // Part 15: tri-state — 'on' | 'follows' (only from people I follow) | 'off'.
+  async function setPrefMode(key: keyof NotificationPrefs, v: PrefMode) {
     if (!prefs) return;
     const next = { ...prefs, [key]: v };
     setPrefs(next);
@@ -252,35 +254,22 @@ export default function SettingsScreen() {
             </View>
           ) : (
             <>
-              <ToggleRow
-                label="New followers"
-                value={prefs.follows}
-                onValueChange={(v) => togglePref('follows', v)}
-              />
-              <ToggleRow
-                label="Follow requests"
-                value={prefs.requests}
-                onValueChange={(v) => togglePref('requests', v)}
-              />
-              <ToggleRow
-                label="Comments & replies"
-                value={prefs.comments}
-                onValueChange={(v) => togglePref('comments', v)}
-              />
-              <ToggleRow
-                label="Comment reactions"
-                value={prefs.reactions}
-                onValueChange={(v) => togglePref('reactions', v)}
-              />
-              <ToggleRow
-                label="Reach milestones"
-                value={prefs.reach}
-                onValueChange={(v) => togglePref('reach', v)}
-              />
-              <ToggleRow
-                label="Messages"
-                value={prefs.messages}
-                onValueChange={(v) => togglePref('messages', v)}
+              <TriRow label="Likes" value={prefs.likes} onChange={(v) => void setPrefMode('likes', v)} />
+              <TriRow label="Comments & replies" value={prefs.comments} onChange={(v) => void setPrefMode('comments', v)} />
+              <TriRow label="Comment reactions" value={prefs.reactions} onChange={(v) => void setPrefMode('reactions', v)} />
+              <TriRow label="Mentions" value={prefs.mentions} onChange={(v) => void setPrefMode('mentions', v)} />
+              <TriRow label="New followers" value={prefs.follows} onChange={(v) => void setPrefMode('follows', v)} />
+              <TriRow label="Follow requests" value={prefs.requests} onChange={(v) => void setPrefMode('requests', v)} />
+              <TriRow label="Messages" value={prefs.messages} onChange={(v) => void setPrefMode('messages', v)} />
+              <TriRow label="Boosts & reach" value={prefs.reach} onChange={(v) => void setPrefMode('reach', v)} noFollows />
+              <TriRow label="Posting & collabs" value={prefs.posts} onChange={(v) => void setPrefMode('posts', v)} noFollows />
+              <TriRow label="Earnings, offers & team" value={prefs.business} onChange={(v) => void setPrefMode('business', v)} noFollows />
+              <TriRow
+                label="Weekly creator digest"
+                sublabel="A Monday summary of your week"
+                value={prefs.digest}
+                onChange={(v) => void setPrefMode('digest', v)}
+                noFollows
               />
             </>
           )}
@@ -457,6 +446,63 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
+// Part 15: On / People I follow / Off, as one-handed chips.
+function TriRow({
+  label,
+  sublabel,
+  value,
+  onChange,
+  noFollows,
+}: {
+  label: string;
+  sublabel?: string;
+  value: PrefMode;
+  onChange: (v: PrefMode) => void;
+  /** Types with no actor (digests, reach) — just On/Off. */
+  noFollows?: boolean;
+}) {
+  const theme = useTheme();
+  const options: { v: PrefMode; title: string }[] = noFollows
+    ? [
+        { v: 'on', title: 'On' },
+        { v: 'off', title: 'Off' },
+      ]
+    : [
+        { v: 'on', title: 'On' },
+        { v: 'follows', title: 'Follows' },
+        { v: 'off', title: 'Off' },
+      ];
+  return (
+    <View style={styles.row}>
+      <View style={styles.rowText}>
+        <ThemedText type="default">{label}</ThemedText>
+        {sublabel ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {sublabel}
+          </ThemedText>
+        ) : null}
+      </View>
+      <View style={styles.triChips}>
+        {options.map((o) => (
+          <Pressable
+            key={o.v}
+            accessibilityRole="button"
+            accessibilityLabel={`${label}: ${o.title === 'Follows' ? 'only from people I follow' : o.title}`}
+            accessibilityState={{ selected: value === o.v }}
+            onPress={() => onChange(o.v)}
+            style={[
+              styles.triChip,
+              { borderColor: value === o.v ? BRAND.accent : theme.border },
+              value === o.v ? styles.triChipOn : null,
+            ]}>
+            <ThemedText type="small">{o.title}</ThemedText>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function ToggleRow({
   label,
   sublabel,
@@ -533,6 +579,9 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
   rowPad: { padding: 14 },
   rowText: { flex: 1, gap: 2 },
+  triChips: { flexDirection: 'row', gap: 6 },
+  triChip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
+  triChipOn: { backgroundColor: 'rgba(255, 122, 24, 0.12)' },
   pressed: { opacity: 0.6 },
   linkLabel: { flex: 1 },
   radii: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, padding: 14, paddingTop: 0 },
