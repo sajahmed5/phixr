@@ -26,6 +26,8 @@ export type GridPost = {
   moderation_status: 'approved' | 'flagged' | 'pending' | 'removed';
   /** Total media items (1 = single, >1 = carousel), for the grid's stacked badge. */
   media_count?: number;
+  /** Part 12C: pinned posts lead the grid. */
+  pinned_at?: string | null;
 };
 
 export async function getProfileOverview(handle: string): Promise<ProfileOverview | null> {
@@ -40,14 +42,33 @@ export async function getProfileOverview(handle: string): Promise<ProfileOvervie
  * verify_profile.js). Thumbnails are signed for the private `media` bucket.
  */
 export async function getProfilePosts(userId: string): Promise<GridPost[]> {
-  const { data, error } = await supabase
+  // Part 12C/12D: pinned posts first, and accepted collab posts appear on the
+  // co-author's grid too (posts RLS still applies to every row fetched).
+  const { collabPostIds } = await import('@/lib/showcase');
+  const collabIds = await collabPostIds(userId).catch(() => [] as string[]);
+  const own = supabase
     .from('posts')
-    .select('id, thumbnail_url, media_type, visibility, moderation_status')
+    .select('id, thumbnail_url, media_type, visibility, moderation_status, pinned_at, created_at')
     .eq('user_id', userId)
-    .neq('moderation_status', 'removed')
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  const rows = (data ?? []) as GridPost[];
+    .neq('moderation_status', 'removed');
+  const collab = collabIds.length
+    ? supabase
+        .from('posts')
+        .select('id, thumbnail_url, media_type, visibility, moderation_status, pinned_at, created_at')
+        .in('id', collabIds)
+        .neq('moderation_status', 'removed')
+    : Promise.resolve({ data: [], error: null } as never);
+  const [a, b] = await Promise.all([own, collab]);
+  if (a.error) throw a.error;
+  type Row = GridPost & { pinned_at: string | null; created_at: string };
+  const seen = new Set<string>();
+  const rows = ([...(a.data ?? []), ...((b as { data: Row[] }).data ?? [])] as Row[])
+    .filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)))
+    .sort((x, y) => {
+      if (!!x.pinned_at !== !!y.pinned_at) return x.pinned_at ? -1 : 1;
+      if (x.pinned_at && y.pinned_at) return x.pinned_at < y.pinned_at ? 1 : -1;
+      return x.created_at < y.created_at ? 1 : -1;
+    }) as GridPost[];
   const [signed, counts] = await Promise.all([
     signMediaPaths(rows.map((r) => r.thumbnail_url)),
     carouselCounts(rows.map((r) => r.id)),

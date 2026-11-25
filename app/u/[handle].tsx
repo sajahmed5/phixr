@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { PostGrid } from '@/components/profile/post-grid';
 import { ProfileHeader } from '@/components/profile/profile-header';
+import { supabase } from '@/lib/supabase';
+import { HighlightsRail, ProfileLinksRow } from '@/components/profile/showcase-sections';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ActionMenu } from '@/components/ui/action-menu';
@@ -31,6 +33,16 @@ export default function PublicProfileScreen() {
   const theme = useTheme();
 
   const [overview, setOverview] = useState<ProfileOverview | null>(null);
+  const [category, setCategory] = useState<string | null>(null);
+  useEffect(() => {
+    if (!overview?.id) return;
+    void supabase
+      .from('profiles')
+      .select('category')
+      .eq('id', overview.id)
+      .maybeSingle()
+      .then(({ data }) => setCategory((data as { category?: string | null } | null)?.category ?? null));
+  }, [overview?.id]);
   const [posts, setPosts] = useState<GridPost[] | null>(null);
   const [gridStatus, setGridStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
@@ -148,7 +160,9 @@ export default function PublicProfileScreen() {
           : 'Follow';
 
   const header = (
+    <>
     <ProfileHeader
+      category={category}
       profile={overview}
       onPressFollowers={() =>
         router.push({
@@ -188,6 +202,9 @@ export default function PublicProfileScreen() {
         )
       }
     />
+    <ProfileLinksRow userId={overview.id} />
+    <HighlightsRail userId={overview.id} isOwner={false} />
+    </>
   );
 
   return (

@@ -16,10 +16,15 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { Button } from '@/components/ui/button';
+import { TextField } from '@/components/ui/text-field';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { getPartnershipLabels } from '@/lib/partnerships';
+import {
+  getCollaborators, inviteCollaborator, leaveCollab, respondCollab,
+  setPostPinned, type Collaborator,
+} from '@/lib/showcase';
 import { getBookmarkState } from '@/lib/bookmarks';
 import { fetchComments, type CommentView } from '@/lib/comments';
 import { parseVideoOverlays } from '@/lib/video-overlays';
@@ -41,6 +46,8 @@ export default function PostViewScreen() {
   const pageW = winW - 32; // styles.content horizontal padding
   const [post, setPost] = useState<PostDetail | null>(null);
   const [ownerMenu, setOwnerMenu] = useState(false);
+  const [collabInviteOpen, setCollabInviteOpen] = useState(false);
+  const [collabHandle, setCollabHandle] = useState('');
   const [extras, setExtras] = useState<PostMediaItem[]>([]);
   const [preview, setPreview] = useState<CommentView[]>([]);
   const [page, setPage] = useState(0);
@@ -60,6 +67,10 @@ export default function PostViewScreen() {
   const [siblings, setSiblings] = useState<string[]>([]);
 
   const isOwner = !!post && post.user_id === user?.id;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mirror of loaded post
+    setPinned(!!(post as unknown as { pinned_at?: string | null })?.pinned_at);
+  }, [post]);
   useEffect(() => {
     if (!isOwner) return;
     let alive = true;
@@ -177,6 +188,18 @@ export default function PostViewScreen() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mount data-loader; sets loading/error state internally
     void load();
   }, [load]);
+
+  // Part 12C/12D: pin state + collaborators.
+  const [pinned, setPinned] = useState(false);
+  const [collabs, setCollabs] = useState<Collaborator[]>([]);
+  const myCollab = collabs.find((c) => c.user_id === user?.id);
+  const loadCollabs = useCallback(() => {
+    if (!id) return;
+    getCollaborators(id).then(setCollabs).catch(() => {});
+  }, [id]);
+  useEffect(() => {
+    loadCollabs();
+  }, [loadCollabs]);
 
   // ASA disclosure (brief 9A): the paid-partnership label on the post page.
   const [partnerLabel, setPartnerLabel] = useState<string | null>(null);
@@ -336,6 +359,44 @@ export default function PostViewScreen() {
             {partnerLabel}
           </ThemedText>
         ) : null}
+        {collabs.filter((c) => c.status === 'accepted').length > 0 ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            with {collabs.filter((c) => c.status === 'accepted').map((c) => `@${c.handle}`).join(', ')}
+            {myCollab?.status === 'accepted' ? '  ·  ' : ''}
+            {myCollab?.status === 'accepted' ? (
+              <ThemedText
+                type="small"
+                style={{ color: BRAND.accent }}
+                onPress={async () => {
+                  if (!(await confirm('Leave this collab?', 'The post stops showing on your profile.', 'Leave'))) return;
+                  try {
+                    await leaveCollab(post.id);
+                    loadCollabs();
+                  } catch { /* noop */ }
+                }}>
+                Leave
+              </ThemedText>
+            ) : null}
+          </ThemedText>
+        ) : null}
+        {myCollab?.status === 'pending' ? (
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <ThemedText type="small">Co-author invite:</ThemedText>
+            <Button
+              title="Accept"
+              onPress={async () => {
+                try { await respondCollab(post.id, true); loadCollabs(); } catch { /* noop */ }
+              }}
+            />
+            <Button
+              title="Decline"
+              variant="secondary"
+              onPress={async () => {
+                try { await respondCollab(post.id, false); loadCollabs(); } catch { /* noop */ }
+              }}
+            />
+          </View>
+        ) : null}
         {post.caption ? (
           <MentionText type="default" style={styles.caption}>
             {post.caption}
@@ -359,18 +420,23 @@ export default function PostViewScreen() {
           </View>
         ) : null}
 
-        {/* Own posts: analytics directly under caption/tags, above comments (#27). */}
-        {isOwnPost ? (
+        {/* Own posts: analytics directly under caption/tags, above comments (#27).
+            Part 12D: accepted co-authors share the full analytics too. */}
+        {isOwnPost || myCollab?.status === 'accepted' ? (
           <>
             <PostAnalyticsCard postId={post.id} />
-            {/* Likers list (Part 4B): only the owner has this door. */}
-            <Button
-              title="See who liked this"
-              variant="secondary"
-              onPress={() => router.push(`/post/${post.id}/likers`)}
-            />
-            {/* Boost (Part 5B): public approved posts only; the server enforces. */}
-            {post.visibility === 'public' ? (
+            {/* Likers list (Part 4B): only the owner has this door —
+                co-authors get aggregates, never the named list. */}
+            {isOwnPost ? (
+              <Button
+                title="See who liked this"
+                variant="secondary"
+                onPress={() => router.push(`/post/${post.id}/likers`)}
+              />
+            ) : null}
+            {/* Boost (Part 5B): public approved posts only; the server enforces.
+                Owner only — co-authors can't spend on it. */}
+            {isOwnPost && post.visibility === 'public' ? (
               <Button
                 title="Boost this post"
                 variant="secondary"
@@ -417,6 +483,7 @@ export default function PostViewScreen() {
 
       {commentsOpen ? (
         <CommentSheet
+          postOwnerId={post.user_id}
           postId={post.id}
           onClose={() => {
             setCommentsOpen(false);
@@ -436,12 +503,59 @@ export default function PostViewScreen() {
 
       <CollectionPicker postId={post.id} visible={saveOpen} onClose={() => setSaveOpen(false)} onChange={setSaved} />
 
+      {collabInviteOpen ? (
+        <View style={[stylesCollab.sheet, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <ThemedText type="smallBold">Invite a co-author</ThemedText>
+          <TextField
+            label=""
+            placeholder="@handle"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={collabHandle}
+            onChangeText={setCollabHandle}
+          />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Button
+              title="Invite"
+              disabled={!collabHandle.trim()}
+              onPress={async () => {
+                try {
+                  await inviteCollaborator(post.id, collabHandle.trim());
+                  setCollabInviteOpen(false);
+                  setCollabHandle('');
+                  loadCollabs();
+                  Alert.alert('Invite sent', 'They appear as a co-author once they accept.');
+                } catch (e) {
+                  Alert.alert("Couldn't invite", e instanceof Error ? e.message : 'Try again.');
+                }
+              }}
+            />
+            <Button title="Cancel" variant="secondary" onPress={() => setCollabInviteOpen(false)} />
+          </View>
+        </View>
+      ) : null}
+
       <ActionMenu
         visible={ownerMenu}
         title="Your post"
         onClose={() => setOwnerMenu(false)}
         options={[
           { label: 'Edit post', onPress: () => router.push({ pathname: '/post/[id]/edit', params: { id: post.id } }) },
+          {
+            label: pinned ? 'Unpin from profile' : 'Pin to profile',
+            onPress: async () => {
+              try {
+                await setPostPinned(post.id, !pinned);
+                setPinned(!pinned);
+              } catch (e) {
+                Alert.alert("Couldn't pin", e instanceof Error ? e.message : 'Try again.');
+              }
+            },
+          },
+          {
+            label: 'Invite co-author…',
+            onPress: () => setCollabInviteOpen(true),
+          },
           {
             label: 'Delete post',
             destructive: true,
@@ -534,5 +648,13 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
     padding: 14,
+  },
+});
+
+
+const stylesCollab = StyleSheet.create({
+  sheet: {
+    position: 'absolute', left: 16, right: 16, bottom: 24,
+    borderWidth: 1, borderRadius: 14, padding: 14, gap: 10,
   },
 });

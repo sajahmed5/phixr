@@ -543,8 +543,28 @@ function Composer({ text, reply, onChangeText, onSend, onAttach, onCancelReply, 
   text: string; reply: Message | null; onChangeText: (t: string) => void; onSend: () => void; onAttach: () => void; onCancelReply: () => void;
   disabled: boolean; hint: string | null; bottomInset: number; theme: ReturnType<typeof useTheme>;
 }) {
+  // Part 12E: one-tap quick replies in DMs.
+  const [quick, setQuick] = useState<{ id: string; shortcut: string; body: string }[]>([]);
+  useEffect(() => {
+    void import('@/lib/showcase').then(({ getQuickReplies }) =>
+      getQuickReplies().then(setQuick).catch(() => {}),
+    );
+  }, []);
   return (
     <View style={[styles.composerWrap, { borderTopColor: theme.border, paddingBottom: Math.max(bottomInset, 8) }]}>
+      {quick.length > 0 && !text ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 12, paddingBottom: 4 }}>
+          {quick.slice(0, 4).map((q) => (
+            <Pressable
+              key={q.id}
+              accessibilityRole="button"
+              onPress={() => onChangeText(q.body)}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 }}>
+              <ThemedText type="small">⚡ {q.shortcut}</ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
       {reply ? (
         <View style={[styles.replyBar, { backgroundColor: theme.backgroundElement }]}>
           <Ionicons name="return-up-back" size={16} color={theme.textSecondary} />

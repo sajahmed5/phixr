@@ -26,6 +26,8 @@ import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { listGroups, type AudienceGroup } from '@/lib/groups';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { mediaFromPipeline, saveDraft, scheduleDraft, type DraftPayload } from '@/lib/drafts';
 import { looksPromotional } from '@/lib/partnerships';
 import { useUpload } from '@/lib/upload-manager';
 
@@ -41,6 +43,72 @@ export default function ComposeScreen() {
   const [groups, setGroups] = useState<AudienceGroup[] | null>(null);
   const [defaultApplied, setDefaultApplied] = useState(false);
   const [promoNudge, setPromoNudge] = useState(false);
+  // Part 12A/12B: drafts + scheduling. Media must be pipeline-processed
+  // (phase 'ready') before a draft can carry it.
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [when, setWhen] = useState<Date>(() => new Date(Date.now() + 60 * 60 * 1000));
+
+  const buildPayload = useCallback((): DraftPayload | null => {
+    const c = composition;
+    if (!c?.result) return null;
+    return {
+      caption: c.draft.caption,
+      alt_text: c.draft.altText,
+      visibility: c.draft.visibility,
+      group_ids: c.draft.groupIds,
+      tags: c.draft.tags,
+      attach_location: c.draft.attachLocation,
+      location_cell: c.draft.locationCell ?? c.result.suggestions.location_cell ?? null,
+      location_label: c.draft.locationLabel,
+      partner_brand: c.draft.partnerBrand,
+      overlays: c.overlays as unknown[],
+      media: mediaFromPipeline([c.result, ...c.extraResults]),
+    };
+  }, [composition]);
+
+  // Autosave (12A): once media is processed, keep a rolling server-side slot
+  // so nothing is lost if the app closes. Debounced on edits.
+  useEffect(() => {
+    const payload = buildPayload();
+    if (!payload || composition?.posting || composition?.postedId) return;
+    const t = setTimeout(() => {
+      saveDraft('post', payload, { autosave: true }).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [buildPayload, composition?.posting, composition?.postedId]);
+
+  const onSaveDraft = async () => {
+    const payload = buildPayload();
+    if (!payload || savingDraft) return;
+    setSavingDraft(true);
+    try {
+      await saveDraft('post', payload, draftId ? { id: draftId } : {});
+      clear();
+      router.replace('/drafts');
+    } catch {
+      setSavingDraft(false);
+    }
+  };
+
+  const onSchedule = async (date: Date) => {
+    const payload = buildPayload();
+    if (!payload) return;
+    setSavingDraft(true);
+    try {
+      const id = draftId ?? (await saveDraft('post', payload, {}));
+      setDraftId(id);
+      await saveDraft('post', payload, { id });
+      await scheduleDraft(id, date);
+      clear();
+      router.replace('/schedule');
+    } catch (e) {
+      setSavingDraft(false);
+      const { Alert } = await import('react-native');
+      Alert.alert("Couldn't schedule", e instanceof Error ? e.message : 'Try again.');
+    }
+  };
 
   // Promotional-post prompt (brief 9C): nudge when the caption carries promo
   // wording or @mentions a business account. Debounced; best-effort.
@@ -370,6 +438,36 @@ export default function ComposeScreen() {
             disabled={!canPost}
             loading={composition.posting}
           />
+          <View style={styles.draftRow}>
+            <Button
+              title="Save draft"
+              variant="secondary"
+              onPress={onSaveDraft}
+              disabled={phase !== 'ready' || savingDraft}
+            />
+            <Button
+              title="Schedule…"
+              variant="secondary"
+              onPress={() => setPickerOpen(true)}
+              disabled={!canPost || phase !== 'ready' || savingDraft}
+            />
+          </View>
+          {pickerOpen ? (
+            <View>
+              <DateTimePicker
+                value={when}
+                mode="datetime"
+                minimumDate={new Date()}
+                onChange={(_e, d) => {
+                  if (d) setWhen(d);
+                }}
+              />
+              <View style={styles.draftRow}>
+                <Button title="Confirm schedule" onPress={() => void onSchedule(when)} disabled={savingDraft} />
+                <Button title="Cancel" variant="secondary" onPress={() => setPickerOpen(false)} />
+              </View>
+            </View>
+          ) : null}
           {flagged ? (
             <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
               This post will be reviewed before it appears to others.
@@ -492,6 +590,7 @@ function VideoPreview({ uri }: { uri: string }) {
 }
 
 const styles = StyleSheet.create({
+  draftRow: { flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 8 },
   fill: { flex: 1 },
   content: { padding: 16, gap: 18 },
   previewWrap: { borderRadius: 16, overflow: 'hidden' },

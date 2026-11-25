@@ -27,8 +27,16 @@ Deno.serve(withSentry('story-reaper', async (req) => {
   if (error) return json({ error: error.message }, 500);
   if (!expired || expired.length === 0) return json({ deleted: 0 });
 
-  // 2. remove media from storage (dedupe keys; ignore already-gone)
-  const keys = [...new Set(expired.flatMap((s) => [s.media_url, s.thumbnail_url].filter(Boolean)))] as string[];
+  // 2. remove media from storage (dedupe keys; ignore already-gone).
+  //    Part 12C: media snapshotted into a story highlight must SURVIVE the
+  //    story's expiry — exclude any key a highlight item references.
+  const candidate = [...new Set(expired.flatMap((s) => [s.media_url, s.thumbnail_url].filter(Boolean)))] as string[];
+  const { data: kept } = await svc
+    .from('story_highlight_items')
+    .select('media_url, thumbnail_url')
+    .in('media_url', candidate);
+  const keep = new Set((kept ?? []).flatMap((k) => [k.media_url, k.thumbnail_url].filter(Boolean)));
+  const keys = candidate.filter((k) => !keep.has(k));
   if (keys.length) {
     const { error: rmErr } = await svc.storage.from('media').remove(keys);
     if (rmErr) console.error('[story-reaper] storage remove:', rmErr.message);

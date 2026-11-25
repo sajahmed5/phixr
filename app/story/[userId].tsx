@@ -267,10 +267,44 @@ export default function StoryViewerScreen() {
 
       {/* footer: own → viewers; others → reply */}
       {story?.is_self ? (
-        <Pressable onPress={openViewers} style={[styles.footerSelf, { bottom: insets.bottom + 16 }]}>
-          <Ionicons name="eye-outline" size={18} color="#fff" />
-          <ThemedText type="small" style={{ color: '#fff' }}>Viewers</ThemedText>
-        </Pressable>
+        <View style={[styles.footerSelf, { bottom: insets.bottom + 16, gap: 18 }]}>
+          <Pressable onPress={openViewers} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="eye-outline" size={18} color="#fff" />
+            <ThemedText type="small" style={{ color: '#fff' }}>Viewers</ThemedText>
+          </Pressable>
+          <Pressable
+            hitSlop={8}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+            onPress={async () => {
+              // Part 12C: add this story to a highlight (original audience kept).
+              setPaused(true);
+              try {
+                const { getHighlights, addStoryToHighlight, createHighlight } = await import('@/lib/showcase');
+                const { data: u } = await (await import('@/lib/supabase')).supabase.auth.getUser();
+                const hs = await getHighlights(u.user!.id);
+                const add = async (hid: string) => {
+                  await addStoryToHighlight(hid, story.id);
+                  Alert.alert('Added to highlight');
+                };
+                if (hs.length === 0) {
+                  const hid = await createHighlight('Highlights');
+                  await add(hid);
+                } else {
+                  Alert.alert('Add to highlight', 'Pick a highlight', [
+                    ...hs.slice(0, 4).map((h) => ({ text: h.name, onPress: () => void add(h.id) })),
+                    { text: 'Cancel', style: 'cancel' as const },
+                  ]);
+                }
+              } catch {
+                Alert.alert("Couldn't add to highlight");
+              } finally {
+                setPaused(false);
+              }
+            }}>
+            <Ionicons name="heart-circle-outline" size={18} color="#fff" />
+            <ThemedText type="small" style={{ color: '#fff' }}>Highlight</ThemedText>
+          </Pressable>
+        </View>
       ) : (
         <Pressable onPress={() => { setPaused(true); setReplying(true); }} style={[styles.replyPrompt, { bottom: insets.bottom + 16 }]}>
           <ThemedText type="small" style={{ color: 'rgba(255,255,255,0.9)' }}>Reply to {ownerName}…</ThemedText>

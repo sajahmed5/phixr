@@ -8,6 +8,8 @@ export const COMMENTS_PAGE_SIZE = 20;
 
 /** A comment as returned by get_comments / get_replies. */
 export type CommentView = {
+  /** Part 12E: set when the post owner pinned this comment. */
+  pinned_at?: string | null;
   id: string;
   post_id: string;
   user_id: string;
@@ -50,7 +52,29 @@ export async function fetchComments(
     _before: before ?? null,
   });
   if (error) throw error;
-  return ((data ?? []) as RawCommentRow[]).map(mapRow);
+  const rows = ((data ?? []) as RawCommentRow[]).map(mapRow);
+  // Part 12E: float pinned comments to the top of the FIRST page. (A pinned
+  // comment older than the loaded pages surfaces when its page loads.)
+  if (!before) {
+    try {
+      const { data: pins } = await supabase
+        .from('comments')
+        .select('id, pinned_at')
+        .eq('post_id', postId)
+        .not('pinned_at', 'is', null);
+      const pinned = new Map(((pins ?? []) as { id: string; pinned_at: string }[]).map((r) => [r.id, r.pinned_at]));
+      if (pinned.size) {
+        for (const r of rows) r.pinned_at = pinned.get(r.id) ?? null;
+        rows.sort((a, b) => {
+          if (!!a.pinned_at !== !!b.pinned_at) return a.pinned_at ? -1 : 1;
+          return 0; // stable otherwise
+        });
+      }
+    } catch {
+      /* pins are cosmetic — never block comments */
+    }
+  }
+  return rows;
 }
 
 /** Replies to a comment, oldest first (one level only). */

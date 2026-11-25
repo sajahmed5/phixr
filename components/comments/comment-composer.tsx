@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -32,6 +32,14 @@ export function CommentComposer({
   // The sheet remounts this composer (keyed by mode) when switching to reply/edit,
   // so the initial text is picked up here without a syncing effect.
   const [text, setText] = useState(initialText);
+  // Part 12E: saved quick replies, insertable with one tap. The Part 5
+  // duplicate rules still apply server-side, so pasted replies earn ~nothing.
+  const [quickReplies, setQuickReplies] = useState<{ id: string; shortcut: string; body: string }[]>([]);
+  useEffect(() => {
+    void import('@/lib/showcase').then(({ getQuickReplies }) =>
+      getQuickReplies().then(setQuickReplies).catch(() => {}),
+    );
+  }, []);
   const [submitting, setSubmitting] = useState(false);
 
   const trimmed = text.trim();
@@ -79,6 +87,20 @@ export function CommentComposer({
           </Pressable>
         ))}
       </View>
+      {quickReplies.length > 0 && !text ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 12, paddingBottom: 6 }}>
+          {quickReplies.slice(0, 4).map((q) => (
+            <Pressable
+              key={q.id}
+              accessibilityRole="button"
+              onPress={() => setText(q.body.slice(0, COMMENT_MAX_LENGTH))}
+              style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: '#8884', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 }}>
+              <ThemedText type="small">⚡ {q.shortcut}</ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
 
       <View style={styles.row}>
         <TextInput
