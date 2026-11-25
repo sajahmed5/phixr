@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
@@ -10,7 +10,15 @@ import { TextField } from '@/components/ui/text-field';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
-import { claimPlace, myVenueClaims, setAccountType, unclaimVenue, type VenueClaim } from '@/lib/business';
+import {
+  claimPlace,
+  myActingBusinesses,
+  myVenueClaims,
+  setAccountType,
+  unclaimVenue,
+  type ActingBusiness,
+  type VenueClaim,
+} from '@/lib/business';
 import { confirm } from '@/lib/confirm';
 import { getCurrentCoords, nearbyPlaces, type NearbyPlace } from '@/lib/location';
 
@@ -22,10 +30,12 @@ import { getCurrentCoords, nearbyPlaces, type NearbyPlace } from '@/lib/location
  */
 export default function BusinessSettingsScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { profile, reload } = useAuth();
   const isBusiness = (profile as { account_type?: string } | null)?.account_type === 'business';
 
   const [claims, setClaims] = useState<VenueClaim[] | null>(null);
+  const [acting, setActing] = useState<ActingBusiness[]>([]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<NearbyPlace[]>([]);
   const [searching, setSearching] = useState(false);
@@ -46,6 +56,7 @@ export default function BusinessSettingsScreen() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mount data-loader
     void load();
+    void myActingBusinesses().then(setActing).catch(() => {});
   }, [load]);
 
   const toggleType = async () => {
@@ -148,6 +159,28 @@ export default function BusinessSettingsScreen() {
             {isBusiness ? (
               <>
                 <ThemedText type="smallBold" style={styles.subhead}>
+                  Manage
+                </ThemedText>
+                {(
+                  [
+                    ['Hours, links & offers', '/business/details', 'time-outline'],
+                    ['Team', '/business/team', 'people-outline'],
+                    ['Business inbox', '/business/inbox', 'chatbubbles-outline'],
+                  ] as const
+                ).map(([label, path, icon]) => (
+                  <Pressable
+                    key={path}
+                    accessibilityRole="button"
+                    onPress={() => router.push(path)}
+                    style={[styles.navRow, { borderColor: theme.border }]}>
+                    <Ionicons name={icon} size={20} color={theme.textSecondary} />
+                    <ThemedText type="smallBold" style={styles.navLabel}>
+                      {label}
+                    </ThemedText>
+                    <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+                  </Pressable>
+                ))}
+                <ThemedText type="smallBold" style={styles.subhead}>
                   Your venues {claims ? `(${claims.length})` : ''}
                 </ThemedText>
                 {claims === null ? <ActivityIndicator color={theme.textSecondary} /> : null}
@@ -182,7 +215,45 @@ export default function BusinessSettingsScreen() {
           </View>
         )}
         ListFooterComponent={
-          isBusiness ? (
+          <>
+            {acting.length > 0 ? (
+              <View style={styles.footer}>
+                <ThemedText type="smallBold" style={styles.subhead}>
+                  Businesses you help run
+                </ThemedText>
+                {acting.map((b) => (
+                  <View key={b.business_id} style={[styles.claimRow, { borderColor: theme.border }]}>
+                    <View style={styles.claimInfo}>
+                      <ThemedText type="smallBold" numberOfLines={1}>
+                        {b.profiles?.handle ? `@${b.profiles.handle}` : 'Business'}
+                      </ThemedText>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        You&apos;re {b.role === 'admin' || b.role === 'editor' || b.role === 'analyst' ? 'an' : 'a'} {b.role}
+                      </ThemedText>
+                    </View>
+                    {b.role === 'admin' || b.role === 'editor' ? (
+                      <Button
+                        title="Details"
+                        variant="secondary"
+                        onPress={() =>
+                          router.push({ pathname: '/business/details', params: { business: b.business_id } })
+                        }
+                      />
+                    ) : null}
+                    {b.role !== 'analyst' ? (
+                      <Button
+                        title="Inbox"
+                        variant="secondary"
+                        onPress={() =>
+                          router.push({ pathname: '/business/inbox', params: { business: b.business_id } })
+                        }
+                      />
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {isBusiness ? (
             <View style={styles.footer}>
               <ThemedText type="smallBold" style={styles.subhead}>
                 Add a venue
@@ -211,7 +282,8 @@ export default function BusinessSettingsScreen() {
                 </Pressable>
               ))}
             </View>
-          ) : null
+            ) : null}
+          </>
         }
       />
     </ThemedView>
@@ -234,6 +306,15 @@ const styles = StyleSheet.create({
   claimInfo: { flex: 1, gap: 2 },
   claimName: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   footer: { gap: 10, marginTop: 10 },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    padding: 12,
+  },
+  navLabel: { flex: 1 },
   resultRow: {
     flexDirection: 'row',
     alignItems: 'center',

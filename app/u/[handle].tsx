@@ -3,6 +3,7 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-rou
 import { useCallback, useState, useEffect } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
+import { BusinessCard } from '@/components/profile/business-card';
 import { PostGrid } from '@/components/profile/post-grid';
 import { ProfileHeader } from '@/components/profile/profile-header';
 import { supabase } from '@/lib/supabase';
@@ -202,6 +203,7 @@ export default function PublicProfileScreen() {
         )
       }
     />
+    <BusinessCard userId={overview.id} isSelf={overview.is_self} />
     <ProfileLinksRow userId={overview.id} />
     <HighlightsRail userId={overview.id} isOwner={false} />
     </>

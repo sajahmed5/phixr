@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { getVenueBusiness, recordBusinessInsight, type VenueBusiness } from '@/lib/business';
 import { signMediaPaths } from '@/lib/media';
 import { getMapVenues, getVenuePosts, type MapVenue, type VenuePost } from '@/lib/search';
 
@@ -42,6 +43,12 @@ function clusterVenues(venues: MapVenue[], region: Region): Cluster[] {
   return [...buckets.values()];
 }
 
+function todayHours(b: VenueBusiness): string | null {
+  if (!b.business_hours) return null;
+  const key = (['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const)[new Date().getDay()];
+  return b.business_hours[key] ?? null;
+}
+
 function formatDistance(m: number): string {
   if (m < 1000) {
     const walkMin = Math.max(1, Math.round(m / 80)); // ~80 m/min walking
@@ -58,6 +65,8 @@ export function LocalMap() {
   const [region, setRegion] = useState<Region | null>(null);
   const [selected, setSelected] = useState<MapVenue | null>(null);
   const [cardPosts, setCardPosts] = useState<(VenuePost & { signed: string })[] | null>(null);
+  // Part 13E: the verified claiming business's hours, links and offers.
+  const [cardBiz, setCardBiz] = useState<VenueBusiness | null>(null);
 
   useEffect(() => {
     void getMapVenues()
@@ -82,6 +91,16 @@ export function LocalMap() {
   const openCard = useCallback(async (v: MapVenue) => {
     setSelected(v);
     setCardPosts(null);
+    setCardBiz(null);
+    void getVenueBusiness(v.id)
+      .then((b) => {
+        setCardBiz(b);
+        if (b) {
+          if (b.offers.length > 0) recordBusinessInsight(b.business_id, 'offer_view');
+          if (b.business_hours) recordBusinessInsight(b.business_id, 'hours_view');
+        }
+      })
+      .catch(() => {});
     try {
       const posts = await getVenuePosts(v.id);
       const signed = await signMediaPaths(posts.map((p) => p.thumbnail_url));
@@ -185,6 +204,30 @@ export function LocalMap() {
               <Ionicons name="close" size={22} color={theme.textSecondary} />
             </Pressable>
           </View>
+          {cardBiz ? (
+            <View style={styles.bizBlock}>
+              {todayHours(cardBiz) ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  Open today {todayHours(cardBiz)}
+                </ThemedText>
+              ) : null}
+              {cardBiz.offers.slice(0, 2).map((o) => (
+                <Pressable
+                  key={o.id}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    recordBusinessInsight(cardBiz.business_id, 'offer_click');
+                    router.push(`/u/${cardBiz.handle}`);
+                  }}
+                  style={[styles.offerPill, { borderColor: BRAND.accent }]}>
+                  <Ionicons name="pricetag" size={14} color={BRAND.accent} />
+                  <ThemedText type="small" numberOfLines={1} style={styles.offerText}>
+                    {o.title}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
           {cardPosts === null ? (
             <ActivityIndicator color={theme.textSecondary} />
           ) : (
@@ -196,7 +239,35 @@ export function LocalMap() {
               ))}
             </View>
           )}
-          <Button title="Directions" variant="secondary" onPress={() => directions(selected)} />
+          <View style={styles.actionRow}>
+            <View style={styles.actionBtn}>
+              <Button title="Directions" variant="secondary" onPress={() => directions(selected)} />
+            </View>
+            {cardBiz?.menu_url ? (
+              <View style={styles.actionBtn}>
+                <Button
+                  title="Menu"
+                  variant="secondary"
+                  onPress={() => {
+                    recordBusinessInsight(cardBiz.business_id, 'menu_click');
+                    void Linking.openURL(cardBiz.menu_url!);
+                  }}
+                />
+              </View>
+            ) : null}
+            {cardBiz?.booking_url ? (
+              <View style={styles.actionBtn}>
+                <Button
+                  title="Book"
+                  variant="secondary"
+                  onPress={() => {
+                    recordBusinessInsight(cardBiz.business_id, 'booking_click');
+                    void Linking.openURL(cardBiz.booking_url!);
+                  }}
+                />
+              </View>
+            ) : null}
+          </View>
         </View>
       ) : null}
     </View>
@@ -231,6 +302,20 @@ const styles = StyleSheet.create({
   cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   cardTitle: { flex: 1, gap: 2 },
   thumbRow: { flexDirection: 'row', gap: 6 },
+  bizBlock: { gap: 6 },
+  offerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    alignSelf: 'flex-start',
+  },
+  offerText: { flexShrink: 1 },
+  actionRow: { flexDirection: 'row', gap: 8 },
+  actionBtn: { flex: 1 },
   thumbWrap: { flex: 1, aspectRatio: 1, borderRadius: 8, overflow: 'hidden' },
   thumb: { width: '100%', height: '100%' },
 });

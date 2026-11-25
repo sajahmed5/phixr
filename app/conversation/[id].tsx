@@ -21,6 +21,7 @@ import { ActionMenu, type ActionOption } from '@/components/ui/action-menu';
 import { useTheme } from '@/hooks/use-theme';
 import { useKeyboardHeight } from '@/lib/use-keyboard-height';
 import { useAuth } from '@/lib/auth-context';
+import { sendMessageAsBusiness } from '@/lib/business';
 import { confirm } from '@/lib/confirm';
 import { blockUser } from '@/lib/profile';
 import { uploadToPipeline } from '@/lib/upload';
@@ -71,12 +72,17 @@ type Pending = {
 export default function ConversationScreen() {
   'use no memo'; // opt out of React Compiler: it can't model the optimistic async
   // setState-after-await flow here (send → await → reconcile). Behaviour is correct.
-  const { id: cid } = useLocalSearchParams<{ id: string }>();
+  // Part 13A: `as` = business id when a team member works the business inbox.
+  // Replies then go through send_message_as_business (the customer sees the
+  // business; the activity log records who really sent it).
+  const { id: cid, as: asBusiness } = useLocalSearchParams<{ id: string; as?: string }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardHeight();
   const { user } = useAuth();
   const meId = user?.id;
+  const acting = typeof asBusiness === 'string' && asBusiness.length > 0 && asBusiness !== meId;
+  const bubbleMeId = acting ? asBusiness : meId;
 
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -97,7 +103,7 @@ export default function ConversationScreen() {
   const lastTypingSent = useRef(0);
   const sendTypingRef = useRef<(uid: string, handle: string) => void>(() => {});
 
-  const other = useMemo(() => detail?.members.find((m) => m.id !== meId), [detail, meId]);
+  const other = useMemo(() => detail?.members.find((m) => m.id !== bubbleMeId), [detail, bubbleMeId]);
   const myHandle = useMemo(() => detail?.members.find((m) => m.id === meId)?.handle ?? 'Someone', [detail, meId]);
   const title = detail?.type === 'group' ? detail?.name ?? 'Group' : other?.display_name ?? other?.handle ?? '';
 
@@ -116,9 +122,9 @@ export default function ConversationScreen() {
     setDetail(d);
     setMessages(msgs);
     setHasOlder(msgs.length === PAGE);
-    void markRead(cid);
+    if (!acting) void markRead(cid); // team members aren't conversation members
     void refreshReactions();
-  }, [cid, refreshReactions]);
+  }, [cid, acting, refreshReactions]);
 
   // React to a message (double-tap → 💯, or the reaction row). Toggles off if I tap the
   // same emoji again. Optimistic; realtime + refetch reconcile.
@@ -184,7 +190,8 @@ export default function ConversationScreen() {
     (t: string) => {
       setText(t);
       const now = Date.now();
-      if (meId && now - lastTypingSent.current > 1500) {
+      // When acting as a business, never broadcast the member's own handle.
+      if (!acting && meId && now - lastTypingSent.current > 1500) {
         lastTypingSent.current = now;
         sendTypingRef.current(meId, myHandle);
       }
@@ -200,8 +207,13 @@ export default function ConversationScreen() {
         ...prev.filter((p) => p.tempId !== tempId),
       ]);
       try {
-        const mediaUrl = opts.mediaUri ? await scanAndUpload(opts.mediaUri) : undefined;
-        await sendMessage(cid, { body: opts.body, mediaUrl, replyToId: opts.replyToId });
+        if (acting && asBusiness) {
+          // Business replies are text-only; sent as the business.
+          await sendMessageAsBusiness(asBusiness, cid, opts.body ?? '');
+        } else {
+          const mediaUrl = opts.mediaUri ? await scanAndUpload(opts.mediaUri) : undefined;
+          await sendMessage(cid, { body: opts.body, mediaUrl, replyToId: opts.replyToId });
+        }
         await refresh(); // loads the real row; then drop the optimistic placeholder
         setPending((prev) => prev.filter((p) => p.tempId !== tempId));
       } catch (e) {
@@ -209,7 +221,7 @@ export default function ConversationScreen() {
         if (e instanceof Error && e.message.includes('safety')) Alert.alert('Blocked', e.message);
       }
     },
-    [cid, refresh],
+    [cid, acting, asBusiness, refresh],
   );
 
   const onSendText = useCallback(async () => {
@@ -233,6 +245,10 @@ export default function ConversationScreen() {
   // safety + conversation actions (…)
   const menuOptions = useCallback((): ActionOption[] => {
     if (!detail) return [];
+    if (acting) {
+      // Team members get safety tools only — mute/block/leave belong to the account.
+      return [{ label: 'Report conversation', onPress: () => setReportTarget('conversation') }];
+    }
     const opts: ActionOption[] = [];
     if (detail.type === 'direct' && other) {
       opts.push({ label: `View @${other.handle}`, onPress: () => router.push({ pathname: '/u/[handle]', params: { handle: other.handle } }) });
@@ -267,7 +283,7 @@ export default function ConversationScreen() {
       },
     });
     return opts;
-  }, [detail, other, meId, cid]);
+  }, [detail, acting, other, meId, cid]);
 
   const combined = useMemo<(Message | Pending)[]>(() => [...pending, ...messages], [pending, messages]);
 
@@ -300,9 +316,9 @@ export default function ConversationScreen() {
           renderItem={({ item }) => (
             <MessageBubble
               item={item}
-              meId={meId}
+              meId={bubbleMeId}
               isGroup={detail?.type === 'group'}
-              seen={isSeen(item, detail, meId)}
+              seen={isSeen(item, detail, bubbleMeId)}
               reactions={'tempId' in item ? [] : reactions.filter((r) => r.message_id === item.id)}
               onReact={reactTo}
               onLongPress={(m) => setMsgMenu(m)}
@@ -331,13 +347,19 @@ export default function ConversationScreen() {
         ) : (
           <Composer
             text={text}
-            reply={reply}
+            reply={acting ? null : reply}
             onChangeText={onChangeText}
             onSend={onSendText}
-            onAttach={onAttach}
+            onAttach={acting ? undefined : onAttach}
             onCancelReply={() => setReply(null)}
             disabled={sending}
-            hint={detail?.pending_outgoing ? 'Message request — they must accept before you can send more.' : null}
+            hint={
+              acting
+                ? 'Replying as the business — the customer sees the business name.'
+                : detail?.pending_outgoing
+                  ? 'Message request — they must accept before you can send more.'
+                  : null
+            }
             bottomInset={keyboard > 0 ? 8 : insets.bottom}
             theme={theme}
           />
@@ -352,7 +374,7 @@ export default function ConversationScreen() {
         options={
           msgMenu
             ? [
-                { label: 'Reply', onPress: () => setReply(msgMenu) },
+                ...(acting ? [] : [{ label: 'Reply', onPress: () => setReply(msgMenu) }]),
                 ...(msgMenu.sender_id === meId && !msgMenu.deleted_at
                   ? [{ label: 'Delete', destructive: true, onPress: async () => { if (!(await confirm('Delete message?', 'This removes it for everyone.', 'Delete'))) return; await deleteMessage(msgMenu.id); void refresh(); } }]
                   : [{ label: 'Report message', onPress: () => setReportTarget(msgMenu) }]),
@@ -540,7 +562,7 @@ function RequestBanner({ handle, onAccept, onDelete, onBlock, theme }: { handle?
 }
 
 function Composer({ text, reply, onChangeText, onSend, onAttach, onCancelReply, disabled, hint, bottomInset, theme }: {
-  text: string; reply: Message | null; onChangeText: (t: string) => void; onSend: () => void; onAttach: () => void; onCancelReply: () => void;
+  text: string; reply: Message | null; onChangeText: (t: string) => void; onSend: () => void; onAttach?: () => void; onCancelReply: () => void;
   disabled: boolean; hint: string | null; bottomInset: number; theme: ReturnType<typeof useTheme>;
 }) {
   // Part 12E: one-tap quick replies in DMs.
@@ -574,7 +596,9 @@ function Composer({ text, reply, onChangeText, onSend, onAttach, onCancelReply, 
       ) : null}
       {hint ? <ThemedText type="small" themeColor="textSecondary" style={{ paddingHorizontal: 12, paddingBottom: 4 }}>{hint}</ThemedText> : null}
       <View style={styles.composer}>
-        <Pressable onPress={onAttach} hitSlop={8} accessibilityLabel="Attach image"><Ionicons name="image-outline" size={24} color={theme.textSecondary} /></Pressable>
+        {onAttach ? (
+          <Pressable onPress={onAttach} hitSlop={8} accessibilityLabel="Attach image"><Ionicons name="image-outline" size={24} color={theme.textSecondary} /></Pressable>
+        ) : null}
         <TextInput
           value={text}
           onChangeText={onChangeText}

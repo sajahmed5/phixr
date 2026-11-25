@@ -8,7 +8,9 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/lib/auth-context';
 import { cancelBoost, getMyBoosts, type MyBoost } from '@/lib/boosts';
+import { getBusinessInsights, type BusinessInsights } from '@/lib/business';
 import { confirm } from '@/lib/confirm';
 import { signMediaPaths } from '@/lib/media';
 import {
@@ -24,6 +26,9 @@ import {
 export default function AnalyticsScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { user, profile } = useAuth();
+  const isBusiness = (profile as { account_type?: string } | null)?.account_type === 'business';
+  const [insights, setInsights] = useState<BusinessInsights | null>(null);
   const [account, setAccount] = useState<AccountAnalytics | null>(null);
   const [tags, setTags] = useState<TagReach[] | null>(null);
   const [overview, setOverview] = useState<CreatorOverview | null>(null);
@@ -48,10 +53,13 @@ export default function AnalyticsScreen() {
         (p): p is string => !!p,
       );
       if (paths.length > 0) setThumbs(await signMediaPaths(paths));
+      if (isBusiness && user?.id) {
+        setInsights(await getBusinessInsights(user.id, 30).catch(() => null));
+      }
     } catch {
       setError(true);
     }
-  }, []);
+  }, [isBusiness, user?.id]);
 
   const stopBoost = async (b: MyBoost) => {
     if (!(await confirm('Stop this boost?', 'Unused whole days are refunded in points.', 'Stop'))) return;
@@ -251,6 +259,27 @@ export default function AnalyticsScreen() {
             </View>
           )}
         </Section>
+
+        {/* Part 13E: business reach — daily-deduped counts only, never who */}
+        {insights ? (
+          <Section
+            title="Your business"
+            subtitle="Last 30 days. Each person counts once a day — never who, only how many.">
+            <View style={styles.pointsRow}>
+              <BigStat label="Profile views" value={insights.totals.profile_view ?? 0} />
+              <BigStat label="Offer views" value={insights.totals.offer_view ?? 0} />
+            </View>
+            <View style={styles.pointsRow}>
+              <BigStat label="Menu taps" value={insights.totals.menu_click ?? 0} />
+              <BigStat label="Booking taps" value={insights.totals.booking_click ?? 0} />
+            </View>
+            {(insights.totals.hours_view ?? 0) > 0 ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                {insights.totals.hours_view} people checked your opening hours.
+              </ThemedText>
+            ) : null}
+          </Section>
+        ) : null}
 
         {/* Points → distribution, in plain English */}
         <Section title="Points & distribution">
