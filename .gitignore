@@ -44,6 +44,9 @@ example
 /ios
 /android
 
+# Generated public legal site (npm run legal:build)
+.legal-site/
+
 # Supabase CLI local link state
 supabase/.temp/
 
