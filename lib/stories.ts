@@ -75,6 +75,10 @@ export async function createStory(
   mediaType: 'image' | 'video',
   durationSeconds?: number,
   overlay?: string,
+  /** 'default' follows your account's public/followers rules; 'groups' limits
+   *  the story to the given audience groups (Part 4A). */
+  audience: 'default' | 'groups' = 'default',
+  groupIds?: string[],
 ): Promise<string> {
   const { data, error } = await supabase.rpc('create_story', {
     _media_url: mediaUrl,
@@ -82,6 +86,8 @@ export async function createStory(
     _media_type: mediaType,
     _duration_seconds: durationSeconds ?? null,
     _overlay: overlay ?? null,
+    _audience: audience,
+    _group_ids: audience === 'groups' ? (groupIds ?? []) : null,
   });
   if (error) throw error;
   return data as string;

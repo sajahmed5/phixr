@@ -335,7 +335,17 @@ export default function PostViewScreen() {
         ) : null}
 
         {/* Own posts: analytics directly under caption/tags, above comments (#27). */}
-        {isOwnPost ? <PostAnalyticsCard postId={post.id} /> : null}
+        {isOwnPost ? (
+          <>
+            <PostAnalyticsCard postId={post.id} />
+            {/* Likers list (Part 4B): only the owner has this door. */}
+            <Button
+              title="See who liked this"
+              variant="secondary"
+              onPress={() => router.push(`/post/${post.id}/likers`)}
+            />
+          </>
+        ) : null}
 
         {preview.length > 0 ? (
           <View style={styles.previewWrap}>

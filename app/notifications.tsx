@@ -71,6 +71,7 @@ export default function NotificationsScreen() {
       if (n.post_id) return router.push(`/post/${n.post_id}/edit`);
       return;
     }
+    if (n.type === 'like' && n.post_id) return router.push(`/post/${n.post_id}/likers`);
     if ((n.type === 'comment' || n.type === 'reply' || n.type === 'comment_reaction' || n.type === 'mention') && n.post_id)
       return router.push(`/post/${n.post_id}`);
     if (n.type === 'mention' && n.actor_handle) return router.push(`/u/${n.actor_handle}`);
@@ -182,6 +183,16 @@ function message(n: InboxNotification): string {
       return `reacted ${n.payload.emoji ?? ''} to your comment`;
     case 'mention':
       return n.comment_id ? 'mentioned you in a comment' : 'mentioned you in a post';
+    case 'like':
+      // Verified highlight (brief 4B): "The Rock liked your post". Grouped
+      // sensibly; quiet likers are counted but never named.
+      return n.count > 1
+        ? n.actor_display_name
+          ? `and ${n.count - 1} other${n.count - 1 === 1 ? '' : 's'} liked your post${n.payload.verified ? ' ✓' : ''}`
+          : `${n.count} people liked your post`
+        : n.actor_display_name
+          ? `liked your post${n.payload.verified ? ' ✓' : ''}`
+          : 'Someone liked your post';
     case 'reach_milestone':
       return `Your post reached ${Number(n.payload.milestone ?? 0).toLocaleString()}+ people 🎉`;
     case 'moderation':

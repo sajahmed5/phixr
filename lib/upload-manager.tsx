@@ -26,7 +26,9 @@ import {
 export type Draft = {
   caption: string;
   altText: string;
-  visibility: 'public' | 'private';
+  visibility: 'public' | 'private' | 'groups';
+  /** Audience groups when visibility is 'groups' (Part 4A). */
+  groupIds: string[];
   attachLocation: boolean;
   /** Coarse cell to store when attachLocation is on — from the photo's EXIF or the device.
    *  null falls back to the pipeline's media cell (if any). */
@@ -62,7 +64,7 @@ export type Composition = {
 type UploadContextValue = {
   composition: Composition | null;
   /** Start a new composition from picked/captured media (+ optional carousel extras). */
-  begin: (media: PickedMedia, defaults: { visibility: 'public' | 'private' }, extras?: PickedMedia[], overlays?: VideoOverlay[]) => void;
+  begin: (media: PickedMedia, defaults: { visibility: 'public' | 'private' | 'groups' }, extras?: PickedMedia[], overlays?: VideoOverlay[]) => void;
   updateDraft: (patch: Partial<Draft>) => void;
   /** Retry a failed upload — keeps the draft (no re-entering caption/tags). */
   retryUpload: () => void;
@@ -103,6 +105,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
         caption: c.draft.caption,
         altText: c.draft.altText,
         visibility: c.draft.visibility,
+        groupIds: c.draft.groupIds,
         attachLocation: c.draft.attachLocation,
         locationCell: c.draft.locationCell,
         tags: c.draft.tags,
@@ -178,7 +181,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
   );
 
   const begin = useCallback(
-    (media: PickedMedia, defaults: { visibility: 'public' | 'private' }, extras: PickedMedia[] = [], overlays: VideoOverlay[] = []) => {
+    (media: PickedMedia, defaults: { visibility: 'public' | 'private' | 'groups' }, extras: PickedMedia[] = [], overlays: VideoOverlay[] = []) => {
       abortRef.current?.();
       const comp: Composition = {
         id: nextId(),
@@ -195,6 +198,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
           caption: '',
           altText: '',
           visibility: defaults.visibility,
+          groupIds: [],
           attachLocation: false,
           locationCell: null,
           locationLabel: null,

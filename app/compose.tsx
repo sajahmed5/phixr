@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -23,6 +24,8 @@ import { FormMessage } from '@/components/ui/form-message';
 import { TextField } from '@/components/ui/text-field';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/lib/auth-context';
+import { listGroups, type AudienceGroup } from '@/lib/groups';
 import { useUpload } from '@/lib/upload-manager';
 
 const CAPTION_MAX = 2200;
@@ -33,11 +36,56 @@ export default function ComposeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { composition, updateDraft, submit, retryUpload, clear } = useUpload();
+  const { user, profile } = useAuth();
+  const [groups, setGroups] = useState<AudienceGroup[] | null>(null);
+  const [defaultApplied, setDefaultApplied] = useState(false);
 
   // If there's no active composition (e.g. deep-linked), bounce back.
   useEffect(() => {
     if (!composition) router.back();
   }, [composition, router]);
+
+  // Audience default (brief 4A): the user's LAST choice, except under-18s
+  // always start on Followers. Groups re-default to the last-picked set only
+  // if every group still exists.
+  useEffect(() => {
+    if (!composition || defaultApplied || !user?.id) return;
+    setDefaultApplied(true);
+    void (async () => {
+      const gs = await listGroups().catch(() => [] as AudienceGroup[]);
+      setGroups(gs);
+      try {
+        if (profile?.age_band === 'minor') {
+          updateDraft({ visibility: 'private', groupIds: [] });
+          return;
+        }
+        const raw = await AsyncStorage.getItem(`compose:last-audience:${user.id}`);
+        if (!raw) return;
+        const saved = JSON.parse(raw) as { visibility: string; groupIds: string[] };
+        if (saved.visibility === 'groups') {
+          const alive = saved.groupIds.filter((id) => gs.some((g) => g.id === id));
+          if (alive.length > 0) updateDraft({ visibility: 'groups', groupIds: alive });
+        } else if (saved.visibility === 'public' || saved.visibility === 'private') {
+          updateDraft({ visibility: saved.visibility, groupIds: [] });
+        }
+      } catch {
+        // defaults are a convenience, never a blocker
+      }
+    })();
+  }, [composition, defaultApplied, user?.id, profile?.age_band, updateDraft]);
+
+  const chooseAudience = useCallback(
+    (visibility: 'public' | 'private' | 'groups', groupIds: string[]) => {
+      updateDraft({ visibility, groupIds });
+      if (user?.id) {
+        void AsyncStorage.setItem(
+          `compose:last-audience:${user.id}`,
+          JSON.stringify({ visibility, groupIds }),
+        ).catch(() => {});
+      }
+    },
+    [updateDraft, user?.id],
+  );
   // Once posted, leave for Home; the app-wide banner reports completion.
   useEffect(() => {
     if (composition?.postedId) router.replace('/');
@@ -48,7 +96,11 @@ export default function ComposeScreen() {
   const { media, extras, draft, phase, progress, result, rejection, uploadError } = composition;
   const analysing = phase === 'uploading';
   const flagged = result?.moderation_status === 'flagged';
-  const canPost = draft.tags.length > 0 && phase !== 'rejected' && !composition.posting;
+  const canPost =
+    draft.tags.length > 0 &&
+    phase !== 'rejected' &&
+    !composition.posting &&
+    (draft.visibility !== 'groups' || draft.groupIds.length > 0);
 
   function onPost() {
     if (!canPost) return;
@@ -148,28 +200,94 @@ export default function ComposeScreen() {
             <Counter value={draft.altText.length} max={ALT_MAX} />
           </View>
 
-          {/* Visibility — a clear Public / Private choice (defaults to your profile's
-              setting). */}
+          {/* Audience (brief 4A): Everyone / Followers / Groups, defaulting to the
+              last choice (minors start on Followers). Group posts never enter the
+              deck or search, and members see NO badge — the choice is the owner's
+              secret. */}
           <View style={[styles.visRow, { borderColor: theme.border }]}>
             <ThemedText type="smallBold">Who can see this?</ThemedText>
             <View style={[styles.segment, { borderColor: theme.border }]}>
               <VisOption
-                label="Public"
+                label="Everyone"
                 icon="earth"
                 active={draft.visibility === 'public'}
-                onPress={() => updateDraft({ visibility: 'public' })}
+                onPress={() => chooseAudience('public', [])}
               />
               <VisOption
-                label="Private"
+                label="Followers"
                 icon="lock-closed"
                 active={draft.visibility === 'private'}
-                onPress={() => updateDraft({ visibility: 'private' })}
+                onPress={() => chooseAudience('private', [])}
+              />
+              <VisOption
+                label="Groups"
+                icon="people"
+                active={draft.visibility === 'groups'}
+                onPress={() =>
+                  chooseAudience(
+                    'groups',
+                    draft.groupIds.length > 0
+                      ? draft.groupIds
+                      : groups && groups.length === 1
+                        ? [groups[0].id]
+                        : draft.groupIds,
+                  )
+                }
               />
             </View>
+            {draft.visibility === 'groups' ? (
+              groups === null ? null : groups.length === 0 ? (
+                <View style={styles.groupHintRow}>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    You haven&apos;t made any groups yet.
+                  </ThemedText>
+                  <Button
+                    title="Create a group"
+                    variant="secondary"
+                    onPress={() => router.push('/settings/groups')}
+                  />
+                </View>
+              ) : (
+                <View style={styles.groupChips}>
+                  {groups.map((g) => {
+                    const on = draft.groupIds.includes(g.id);
+                    return (
+                      <Pressable
+                        key={g.id}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: on }}
+                        onPress={() =>
+                          chooseAudience(
+                            'groups',
+                            on
+                              ? draft.groupIds.filter((id) => id !== g.id)
+                              : [...draft.groupIds, g.id],
+                          )
+                        }
+                        style={[
+                          styles.groupChip,
+                          { borderColor: theme.border },
+                          on && { backgroundColor: BRAND.accent, borderColor: BRAND.accent },
+                        ]}>
+                        <ThemedText
+                          type="smallBold"
+                          style={{ color: on ? BRAND.onAccent : theme.text }}>
+                          {g.name}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )
+            ) : null}
             <ThemedText type="small" themeColor="textSecondary">
-              {draft.visibility === 'private'
-                ? 'Only your accepted followers can see it.'
-                : 'Anyone can discover this in the deck.'}
+              {draft.visibility === 'public'
+                ? 'Anyone can discover this in the deck.'
+                : draft.visibility === 'private'
+                  ? 'Only your accepted followers can see it.'
+                  : draft.groupIds.length === 0
+                    ? 'Pick at least one group.'
+                    : 'Only people in the chosen groups can see it. They are never told a group exists.'}
             </ThemedText>
           </View>
 
@@ -354,6 +472,14 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 72, textAlignVertical: 'top' },
   counter: { alignSelf: 'flex-end', marginTop: 4 },
   visRow: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 14, gap: 10 },
+  groupHintRow: { gap: 8 },
+  groupChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  groupChip: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
   segment: {
     flexDirection: 'row',
     borderWidth: StyleSheet.hairlineWidth,

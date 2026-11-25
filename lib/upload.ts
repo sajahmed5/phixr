@@ -155,7 +155,9 @@ export type CreatePostInput = {
   extras?: PipelineResult[];
   caption: string;
   altText: string;
-  visibility: 'public' | 'private';
+  visibility: 'public' | 'private' | 'groups';
+  /** Required when visibility is 'groups': the audience groups to share with. */
+  groupIds?: string[];
   attachLocation: boolean;
   /** Coarse cell chosen client-side (device GPS / picked venue). Falls back to the
    *  pipeline's EXIF-derived cell when null. */
@@ -200,6 +202,14 @@ export async function createPost(input: CreatePostInput): Promise<string> {
     .single();
   if (error) throw error;
   const postId = (post as { id: string }).id;
+
+  // Group audience: attach the chosen groups right away. Until these rows land
+  // a 'groups' post is visible to nobody but the owner (safe failure mode).
+  if (input.visibility === 'groups') {
+    if (!input.groupIds?.length) throw new Error('Pick at least one group.');
+    const { setPostGroups } = await import('@/lib/groups');
+    await setPostGroups(postId, input.groupIds);
+  }
 
   // Carousel extras: one row per additional media item. Each consumed its own
   // pipeline verdict via the post_media trigger (a bad extra downgrades the post).

@@ -2,12 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
+import { listGroups, type AudienceGroup } from '@/lib/groups';
 import { createStory } from '@/lib/stories';
 import { uploadToPipeline } from '@/lib/upload';
 
@@ -19,6 +20,15 @@ export default function StoryCreateScreen() {
   const [overlay, setOverlay] = useState('');
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Audience (Part 4A): everyone-you-allow (default) or specific groups.
+  const [groups, setGroups] = useState<AudienceGroup[]>([]);
+  const [groupIds, setGroupIds] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  useEffect(() => {
+    void listGroups()
+      .then(setGroups)
+      .catch(() => {});
+  }, []);
 
   const player = useVideoPlayer(type === 'video' ? uri : null, (p) => {
     p.loop = true;
@@ -40,7 +50,15 @@ export default function StoryCreateScreen() {
         setBusy(false);
         return;
       }
-      await createStory(result.media_url, result.thumbnail_url, result.media_type, result.duration_seconds, overlay.trim() || undefined);
+      await createStory(
+        result.media_url,
+        result.thumbnail_url,
+        result.media_type,
+        result.duration_seconds,
+        overlay.trim() || undefined,
+        groupIds.length > 0 ? 'groups' : 'default',
+        groupIds,
+      );
       router.dismissAll?.();
       router.replace('/following');
     } catch (e) {
@@ -96,6 +114,57 @@ export default function StoryCreateScreen() {
         ) : null}
       </View>
 
+      {/* Audience chip + picker (only shown when the user has groups). Members
+          never see which audience a story used — this is the owner's view only. */}
+      {groups.length > 0 ? (
+        <Pressable
+          onPress={() => setPickerOpen((v) => !v)}
+          style={[styles.audienceChip, { bottom: insets.bottom + 16 }]}>
+          <Ionicons name={groupIds.length > 0 ? 'people' : 'earth'} size={16} color="#fff" />
+          <ThemedText type="smallBold" style={{ color: '#fff' }}>
+            {groupIds.length === 0
+              ? 'Everyone'
+              : groups
+                  .filter((g) => groupIds.includes(g.id))
+                  .map((g) => g.name)
+                  .join(', ')}
+          </ThemedText>
+        </Pressable>
+      ) : null}
+      {pickerOpen ? (
+        <View style={[styles.audienceSheet, { bottom: insets.bottom + 64 }]}>
+          <Pressable
+            onPress={() => {
+              setGroupIds([]);
+              setPickerOpen(false);
+            }}
+            style={styles.audienceRow}>
+            <Ionicons name="earth" size={18} color="#fff" />
+            <ThemedText type="smallBold" style={{ color: '#fff' }}>
+              Everyone you allow
+            </ThemedText>
+            {groupIds.length === 0 ? <Ionicons name="checkmark" size={18} color="#fff" /> : null}
+          </Pressable>
+          {groups.map((g) => {
+            const on = groupIds.includes(g.id);
+            return (
+              <Pressable
+                key={g.id}
+                onPress={() =>
+                  setGroupIds((prev) => (on ? prev.filter((x) => x !== g.id) : [...prev, g.id]))
+                }
+                style={styles.audienceRow}>
+                <Ionicons name="people" size={18} color="#fff" />
+                <ThemedText type="smallBold" style={{ color: '#fff' }}>
+                  {g.name}
+                </ThemedText>
+                {on ? <Ionicons name="checkmark" size={18} color="#fff" /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+
       <Pressable onPress={share} disabled={busy} style={[styles.share, { bottom: insets.bottom + 16, backgroundColor: theme.tint }]}>
         {busy ? (
           <ActivityIndicator color="#fff" />
@@ -120,4 +189,7 @@ const styles = StyleSheet.create({
   top: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   aa: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
   share: { position: 'absolute', right: 16, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 999 },
+  audienceChip: { position: 'absolute', left: 16, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.55)', maxWidth: '55%' },
+  audienceSheet: { position: 'absolute', left: 16, gap: 2, padding: 8, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.75)' },
+  audienceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 9 },
 });
