@@ -7,7 +7,68 @@ import { supabase } from '@/lib/supabase';
 
 export type SearchMode = 'worldwide' | 'local' | 'tags' | 'accounts';
 
-export type SearchPost = DeckCard;
+export type SearchPost = DeckCard & {
+  /** Local search only: real distance to the venue (or the business's nearest branch). */
+  distance_m?: number | null;
+  venue_name?: string | null;
+};
+
+/** Category filter chips (brief 7A). null = everything. */
+export type SearchCategory = 'food' | 'drink' | 'shops' | 'todo' | null;
+export const SEARCH_CATEGORIES: { key: Exclude<SearchCategory, null>; label: string }[] = [
+  { key: 'food', label: 'Food' },
+  { key: 'drink', label: 'Drink' },
+  { key: 'shops', label: 'Shops' },
+  { key: 'todo', label: 'Things to do' },
+];
+
+/** A paid placement in local search (brief 7D): always labelled, real distance. */
+export type SponsoredResult = {
+  id: string;
+  business_id: string;
+  business_handle: string;
+  venue_id: string;
+  venue_name: string;
+  venue_category: string | null;
+  distance_m: number;
+};
+
+export async function getSponsoredResults(q: string): Promise<SponsoredResult[]> {
+  const { data, error } = await supabase.rpc('get_sponsored_results', { _q: q });
+  if (error) return [];
+  return (data ?? []) as SponsoredResult[];
+}
+
+export function recordSponsoredClick(id: string): void {
+  void supabase.rpc('record_sponsored_click', { _id: id }).then(() => {}, () => {});
+}
+
+/** Map pins (brief 7B): venues only — never a person's location. */
+export type MapVenue = {
+  id: string;
+  name: string;
+  category: string | null;
+  category_group: string;
+  lat: number;
+  lon: number;
+  post_count: number;
+  like_rate: number | null;
+  distance_m: number;
+};
+
+export async function getMapVenues(limit = 200): Promise<MapVenue[]> {
+  const { data, error } = await supabase.rpc('get_map_venues', { _limit: limit });
+  if (error) throw error;
+  return (data ?? []) as MapVenue[];
+}
+
+export type VenuePost = { id: string; thumbnail_url: string; media_type: 'image' | 'video'; like_count: number };
+
+export async function getVenuePosts(venueId: string, limit = 6): Promise<VenuePost[]> {
+  const { data, error } = await supabase.rpc('get_venue_posts', { _venue_id: venueId, _limit: limit });
+  if (error) throw error;
+  return (data ?? []) as VenuePost[];
+}
 
 export type AccountHit = {
   id: string;
@@ -33,11 +94,17 @@ export async function searchPosts(
   q: string,
   offset = 0,
   limit = PAGE,
+  category: SearchCategory = null,
 ): Promise<SearchPost[]> {
   const fn = mode === 'local' ? 'search_posts_local' : 'search_posts';
-  const { data, error } = await supabase.rpc(fn, { _q: q, _limit: limit, _offset: offset });
+  const { data, error } = await supabase.rpc(fn, {
+    _q: q,
+    _limit: limit,
+    _offset: offset,
+    _category: category,
+  });
   if (error) throw error;
-  return resolveDeckMedia((data ?? []) as DeckCard[]);
+  return (await resolveDeckMedia((data ?? []) as DeckCard[])) as SearchPost[];
 }
 
 /**
