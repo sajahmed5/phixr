@@ -1,14 +1,17 @@
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import { getPostAnalytics, type PostAnalytics } from '@/lib/profile';
 
 /** Per-post analytics (own posts only). Aggregate counts + like/skip rate; rates are
- *  suppressed by the RPC on tiny samples, so no individual swiper can be inferred. */
+ *  suppressed by the RPC on tiny samples, so no individual swiper can be inferred.
+ *  Tapping opens the full insights screen (Part 3). */
 export function PostAnalyticsCard({ postId }: { postId: string }) {
   const theme = useTheme();
+  const router = useRouter();
   const [data, setData] = useState<PostAnalytics | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
@@ -27,14 +30,22 @@ export function PostAnalyticsCard({ postId }: { postId: string }) {
   }, [load]);
 
   return (
-    <View style={[styles.card, { borderColor: theme.border }]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="View post insights"
+      onPress={() => router.push(`/analytics/post/${postId}`)}
+      style={[styles.card, { borderColor: theme.border }]}>
       <View style={styles.titleRow}>
         <ThemedText type="smallBold">Analytics</ThemedText>
         {status === 'ready' && data && !data.sample_suppressed ? (
           <ThemedText type="small" themeColor="textSecondary">
             {Math.round((data.like_rate ?? 0) * 100)}% liked · {Math.round((data.skip_rate ?? 0) * 100)}% skipped
           </ThemedText>
-        ) : null}
+        ) : (
+          <ThemedText type="small" themeColor="textSecondary">
+            Insights ›
+          </ThemedText>
+        )}
       </View>
       {status === 'loading' ? (
         <ActivityIndicator color={theme.textSecondary} style={styles.pad} />
@@ -58,7 +69,7 @@ export function PostAnalyticsCard({ postId }: { postId: string }) {
           ) : null}
         </>
       )}
-    </View>
+    </Pressable>
   );
 }
 

@@ -1,16 +1,21 @@
+import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { signMediaPaths } from '@/lib/media';
 import {
   getAccountAnalytics,
+  getCreatorOverview,
   getTagReach,
   type AccountAnalytics,
+  type CreatorOverview,
+  type OverviewPost,
   type TagReach,
 } from '@/lib/profile';
 
@@ -19,14 +24,25 @@ export default function AnalyticsScreen() {
   const router = useRouter();
   const [account, setAccount] = useState<AccountAnalytics | null>(null);
   const [tags, setTags] = useState<TagReach[] | null>(null);
+  const [overview, setOverview] = useState<CreatorOverview | null>(null);
+  const [thumbs, setThumbs] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     setError(false);
     try {
-      const [a, t] = await Promise.all([getAccountAnalytics(), getTagReach()]);
+      const [a, t, o] = await Promise.all([
+        getAccountAnalytics(),
+        getTagReach(),
+        getCreatorOverview(),
+      ]);
       setAccount(a);
       setTags(t);
+      setOverview(o);
+      const paths = [o.best_post?.thumbnail_url, o.worst_post?.thumbnail_url].filter(
+        (p): p is string => !!p,
+      );
+      if (paths.length > 0) setThumbs(await signMediaPaths(paths));
     } catch {
       setError(true);
     }
@@ -47,7 +63,7 @@ export default function AnalyticsScreen() {
       </ThemedView>
     );
   }
-  if (!account || !tags) {
+  if (!account || !tags || !overview) {
     return (
       <ThemedView style={styles.center}>
         <Stack.Screen options={{ headerShown: true, title: 'Analytics' }} />
@@ -58,6 +74,7 @@ export default function AnalyticsScreen() {
 
   const maxReach = Math.max(1, ...tags.map((t) => Number(t.reach)));
   const maxWeek = Math.max(1, ...account.follower_growth.map((w) => w.new_followers));
+  const maxHour = Math.max(1, ...overview.hours.map((h) => h.swipes));
 
   return (
     <ThemedView style={styles.fill}>
@@ -69,6 +86,61 @@ export default function AnalyticsScreen() {
           <BigStat label="Posts" value={account.post_count} />
           <BigStat label="Total reach" value={account.total_reach} />
         </View>
+
+        {/* LAST 7 / 28 DAYS (Part 3C) — tracked views, so recent activity only */}
+        <Section title="Recent performance" subtitle="From tracked views over the last month.">
+          <WindowRow label="Last 7 days" w={overview.week} />
+          <WindowRow label="Last 28 days" w={overview.month} />
+        </Section>
+
+        {/* Best & worst recent posts, one tip each */}
+        {overview.best_post ? (
+          <Section title="What's working">
+            <OverviewPostRow
+              tag="Best"
+              post={overview.best_post}
+              thumb={thumbs.get(overview.best_post.thumbnail_url)}
+              onPress={() => router.push(`/analytics/post/${overview.best_post!.post_id}`)}
+            />
+            {overview.worst_post ? (
+              <OverviewPostRow
+                tag="Needs love"
+                post={overview.worst_post}
+                thumb={thumbs.get(overview.worst_post.thumbnail_url)}
+                onPress={() => router.push(`/analytics/post/${overview.worst_post!.post_id}`)}
+              />
+            ) : null}
+          </Section>
+        ) : null}
+
+        {/* Best time to post — audience swipe activity by hour, totals only */}
+        {overview.hours.length > 0 && overview.top_hour != null ? (
+          <Section
+            title="Best time to post"
+            subtitle={`Your audience is most active around ${formatHour(overview.top_hour)}.`}>
+            <View style={styles.hourRow}>
+              {overview.hours.map((h) => (
+                <View key={h.hour} style={styles.hourCol}>
+                  <View style={styles.hourBarWrap}>
+                    <View
+                      style={[
+                        styles.hourBar,
+                        {
+                          height: `${(h.swipes / maxHour) * 100}%`,
+                          backgroundColor:
+                            h.hour === overview.top_hour ? BRAND.accent : theme.backgroundSelected,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.hourLabel}>
+                    {h.hour}
+                  </ThemedText>
+                </View>
+              ))}
+            </View>
+          </Section>
+        ) : null}
 
         {/* TAG REACH — the most useful screen: which tags actually pull reach */}
         <Section
@@ -170,6 +242,83 @@ function pointsExplanation(balance: number, multiplier: number): string {
   );
 }
 
+function formatHour(h: number): string {
+  return `${h.toString().padStart(2, '0')}:00`;
+}
+
+function WindowRow({
+  label,
+  w,
+}: {
+  label: string;
+  w: { views: number; like_rate: number | null; followers_gained: number; points_earned: number };
+}) {
+  return (
+    <View style={styles.windowRow}>
+      <ThemedText type="smallBold" style={styles.windowLabel}>
+        {label}
+      </ThemedText>
+      <View style={styles.windowStats}>
+        <MiniStat label="Views" text={w.views.toLocaleString()} />
+        <MiniStat
+          label="Liked"
+          text={w.like_rate != null ? `${Math.round(w.like_rate * 100)}%` : '—'}
+        />
+        <MiniStat label="Followers" text={`+${w.followers_gained.toLocaleString()}`} />
+        <MiniStat label="Points" text={`+${w.points_earned.toLocaleString()}`} />
+      </View>
+    </View>
+  );
+}
+
+function MiniStat({ label, text }: { label: string; text: string }) {
+  return (
+    <View style={styles.miniStat}>
+      <ThemedText type="subtitle">{text}</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {label}
+      </ThemedText>
+    </View>
+  );
+}
+
+function OverviewPostRow({
+  tag,
+  post,
+  thumb,
+  onPress,
+}: {
+  tag: string;
+  post: OverviewPost;
+  thumb?: string;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${tag} post — view insights`}
+      onPress={onPress}
+      style={[styles.postRow, { borderColor: theme.border }]}>
+      {thumb ? (
+        <Image source={{ uri: thumb }} style={styles.postThumb} contentFit="cover" />
+      ) : (
+        <View style={[styles.postThumb, { backgroundColor: theme.backgroundSelected }]} />
+      )}
+      <View style={styles.postInfo}>
+        <ThemedText type="smallBold">
+          {tag} · {Math.round(post.like_rate * 100)}% liked · {post.views.toLocaleString()} views
+        </ThemedText>
+        {post.tip ? (
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
+            {post.tip}
+          </ThemedText>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+}
+
 function Section({
   title,
   subtitle,
@@ -223,4 +372,23 @@ const styles = StyleSheet.create({
   weekBar: { width: '100%', borderRadius: 4, minHeight: 3 },
   weekLabel: { fontSize: 9 },
   pointsRow: { flexDirection: 'row', gap: 20, marginBottom: 6 },
+  windowRow: { gap: 6 },
+  windowLabel: { marginTop: 2 },
+  windowStats: { flexDirection: 'row', justifyContent: 'space-between' },
+  miniStat: { alignItems: 'center', gap: 2, flex: 1 },
+  postRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    padding: 10,
+  },
+  postThumb: { width: 52, height: 52, borderRadius: 8 },
+  postInfo: { flex: 1, gap: 2 },
+  hourRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 90 },
+  hourCol: { flex: 1, alignItems: 'center', gap: 4 },
+  hourBarWrap: { flex: 1, width: '80%', justifyContent: 'flex-end' },
+  hourBar: { width: '100%', borderRadius: 2, minHeight: 2 },
+  hourLabel: { fontSize: 8 },
 });

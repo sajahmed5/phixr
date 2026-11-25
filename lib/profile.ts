@@ -372,6 +372,76 @@ export async function getAccountAnalytics(): Promise<AccountAnalytics> {
   return data![0] as AccountAnalytics;
 }
 
+/** Everything the per-post insights screen needs, in one call (Part 3). */
+export type PostInsights = {
+  deck_likes: number;
+  deck_skips: number;
+  feed_likes: number;
+  comments: number;
+  reach: number;
+  like_rate: number | null;
+  /** How many of the creator's previous (up to 10) rateable posts this one beats. */
+  better_than: number | null;
+  recent_count: number;
+  sample_suppressed: boolean;
+  min_views: number;
+  enough_views: boolean;
+  watch: {
+    views: number;
+    quick_skip_rate: number | null;
+    avg_dwell_ms: number | null;
+    video_views: number;
+    completion_rate: number | null;
+    /** Viewers still watching at the start of each second (sparse; seconds ascend). */
+    dropoff: { sec: number; watching: number }[];
+    dropoff_peak_sec: number | null;
+  };
+  audience: {
+    likers: number;
+    age_bands: { band: string; likes: number }[];
+    /** Combined under-18 count; null when below the aggregate floor (then inside Other). */
+    under18_likes: number | null;
+    regions: { region: string; likes: number }[];
+    interests: { tag: string; likes: number }[];
+  };
+  tip: string | null;
+};
+export async function getPostInsights(postId: string): Promise<PostInsights> {
+  const { data, error } = await supabase.rpc('get_post_insights', { _post_id: postId });
+  if (error) throw error;
+  return data as PostInsights;
+}
+
+/** 7/28-day creator overview (Part 3). */
+export type OverviewWindow = {
+  views: number;
+  like_rate: number | null;
+  followers_gained: number;
+  points_earned: number;
+};
+export type OverviewPost = {
+  post_id: string;
+  thumbnail_url: string;
+  media_type: 'image' | 'video';
+  caption: string | null;
+  views: number;
+  like_rate: number;
+  tip: string | null;
+};
+export type CreatorOverview = {
+  week: OverviewWindow;
+  month: OverviewWindow;
+  best_post: OverviewPost | null;
+  worst_post: OverviewPost | null;
+  hours: { hour: number; swipes: number }[];
+  top_hour: number | null;
+};
+export async function getCreatorOverview(): Promise<CreatorOverview> {
+  const { data, error } = await supabase.rpc('get_creator_overview');
+  if (error) throw error;
+  return data as CreatorOverview;
+}
+
 export type TagReach = {
   tag: string;
   posts: number;
