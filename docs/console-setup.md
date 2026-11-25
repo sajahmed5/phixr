@@ -75,6 +75,11 @@ Declare these data types (all "Linked to you" unless noted):
 Optional-analytics note: PostHog usage data is anonymous and opt-out; it is
 covered by the Usage Data declarations above.
 
+**Privacy Policy URL** (same page in ASC): `https://phixr-legal.vercel.app/privacy` —
+built from the in-app text in `constants/legal.ts` by `scripts/build-legal-site.js`
+(Vercel project `phixr-legal`). After any change to the privacy text or
+`TERMS_VERSION`, run `npm run legal:deploy` so the public page matches the app.
+
 When done, the privacy answers publish with the **next app submission** (build 9's
 TestFlight build inherits the current label; the public App Store listing shows
 the new answers on release).

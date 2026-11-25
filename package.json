@@ -67,7 +67,9 @@
     "lint:fix": "expo lint --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "legal:build": "node scripts/build-legal-site.js",
+    "legal:deploy": "node scripts/build-legal-site.js && npx vercel deploy .legal-site --prod --yes --project phixr-legal"
   },
   "private": true
 }
