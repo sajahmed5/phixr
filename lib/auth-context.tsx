@@ -86,7 +86,15 @@ async function resolveProfile(user: User): Promise<ProfileResolution> {
       .select('*')
       .single();
 
-    if (!insertError && created) return { kind: 'have', profile: created as Profile };
+    if (!insertError && created) {
+      // Signup ads choice (8D): apply it now that the profile exists. Best
+      // effort — 'unset' is treated as non-personalised, and Settings can set
+      // it later. The server refuses 'personalised' for minors regardless.
+      const { setAdsConsent } = await import('@/lib/ads');
+      await setAdsConsent(md.ads_personalised === true ? 'personalised' : 'non_personalised')
+        .catch(() => {});
+      return { kind: 'have', profile: created as Profile };
+    }
     // Insert failed (most likely the handle was taken since signup) → fall through and let
     // the identity screen resume so the user can pick a new handle.
   }
