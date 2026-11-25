@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { CardMedia } from '@/components/deck/card-media';
 import { SensitiveCover } from '@/components/sensitive-cover';
+import { AdOverlay } from '@/components/deck/ad-overlay';
 import { BRAND, TAB_BAR_CLEARANCE } from '@/constants/config';
 import type { DeckCard } from '@/lib/deck';
 import { formatCount } from '@/lib/format';
@@ -59,6 +60,7 @@ export const SwipeCard = memo(function SwipeCard({
     <View style={styles.card}>
       <CardMedia card={shown} isActive={isActive} />
       {card.sensitive && !revealed ? <SensitiveCover onReveal={() => setRevealed(true)} /> : null}
+      {card.is_ad ? <AdOverlay card={card} isActive={isActive} /> : null}
 
       {/* Position counter — static, so it never competes with tap-to-advance. */}
       {shots ? (

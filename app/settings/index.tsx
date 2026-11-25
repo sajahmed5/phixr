@@ -18,6 +18,7 @@ import { ActionMenu } from '@/components/ui/action-menu';
 import { ThemedView } from '@/components/themed-view';
 import { BRAND, SUPPORT_EMAIL } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { getAdsConsent, setAdsConsent } from '@/lib/ads';
 import { analytics } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth-context';
 import { confirm } from '@/lib/confirm';
@@ -57,6 +58,15 @@ export default function SettingsScreen() {
   }
 
   const [hideLikes, setHideLikesState] = useState(false);
+  const [personalisedAds, setPersonalisedAds] = useState(false);
+  async function togglePersonalisedAds(v: boolean) {
+    setPersonalisedAds(v);
+    try {
+      await setAdsConsent(v ? 'personalised' : 'non_personalised');
+    } catch {
+      setPersonalisedAds(!v);
+    }
+  }
   async function toggleHideLikes(v: boolean) {
     setHideLikesState(v);
     try {
@@ -69,6 +79,7 @@ export default function SettingsScreen() {
   const loadPrefs = useCallback(async () => {
     setPrefs(await getNotificationPrefs().catch(() => null));
     setHideLikesState(await getHideLikes().catch(() => false));
+    setPersonalisedAds((await getAdsConsent().catch(() => 'unset')) === 'personalised');
   }, []);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mount data-loader
@@ -178,6 +189,14 @@ export default function SettingsScreen() {
             value={hideLikes}
             onValueChange={toggleHideLikes}
           />
+          {profile?.age_band !== 'minor' ? (
+            <ToggleRow
+              label="Personalised ads"
+              sublabel="Use your age group, area and interests to pick ads. Off means ads that aren't based on you. Recorded with a timestamp (UK GDPR)."
+              value={personalisedAds}
+              onValueChange={togglePersonalisedAds}
+            />
+          ) : null}
           <LinkRow
             icon="people-outline"
             label="Audience groups"
