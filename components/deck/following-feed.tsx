@@ -16,6 +16,7 @@ import { FollowingEmpty } from '@/components/deck/following-empty';
 import { StoriesRail } from '@/components/deck/stories-rail';
 import { MentionText } from '@/components/mention-text';
 import { ShareSheet } from '@/components/share-sheet';
+import { SensitiveCover } from '@/components/sensitive-cover';
 import { ThemedText } from '@/components/themed-text';
 import { Avatar } from '@/components/ui/avatar';
 import { BRAND, TAB_BAR_CLEARANCE } from '@/constants/config';
@@ -173,6 +174,8 @@ const FeedCard = memo(function FeedCard({
   const router = useRouter();
   const { width: winW } = useWindowDimensions();
   const [page, setPage] = useState(0);
+  // Sensitive cover (6B): server never sends these to minors.
+  const [revealed, setRevealed] = useState(false);
   // The heart reflects FEED likes only; the shown count is deck + feed likes
   // combined (a like is a like to viewers — creators see the split in analytics).
   const [liked, setLiked] = useState(Boolean(card.my_feed_like));
@@ -229,6 +232,8 @@ const FeedCard = memo(function FeedCard({
       </Pressable>
 
       <GestureDetector gesture={doubleTap}>
+      <View>
+      {card.sensitive && !revealed ? <SensitiveCover onReveal={() => setRevealed(true)} /> : null}
       {extras.length === 0 ? (
         card.media_type === 'video' ? (
           <FeedVideo uri={card.media_url} overlays={card.overlays} />
@@ -270,6 +275,7 @@ const FeedCard = memo(function FeedCard({
           </View>
         </View>
       )}
+      </View>
       </GestureDetector>
 
       <View style={styles.actions}>
