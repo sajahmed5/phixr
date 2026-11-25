@@ -7,6 +7,7 @@ import { VideoOverlays } from '@/components/video-overlays';
 import { parseVideoOverlays } from '@/lib/video-overlays';
 import { memo, useCallback, useEffect, useState, useMemo } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CollectionPicker } from '@/components/collection-picker';
@@ -20,7 +21,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { BRAND, TAB_BAR_CLEARANCE } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { getBookmarkState } from '@/lib/bookmarks';
-import { fetchFollowingFeed, recordSwipe, type DeckCard } from '@/lib/deck';
+import { fetchFollowingFeed, toggleFeedLike, type DeckCard } from '@/lib/deck';
 import { formatCount } from '@/lib/format';
 import { getExtrasForPosts, type PostMediaItem } from '@/lib/posts';
 import { resolveDeckMedia } from '@/lib/media';
@@ -30,8 +31,9 @@ const PAGE = 15;
 
 /**
  * Persistent Instagram/TikTok-style feed for the Following tab: a scrollable list of
- * recent posts from accounts you follow, paginated, NOT consumed by swiping. Like opens
- * a right-swipe (private, as everywhere); comment/share reuse the shared sheets.
+ * recent posts from accounts you follow, paginated, NOT consumed by swiping. The heart
+ * (button or double tap) is a FEED like — its own counter, not a deck swipe, no points
+ * (brief 2A); comment/share reuse the shared sheets.
  */
 export function FollowingFeed() {
   const insets = useSafeAreaInsets();
@@ -123,7 +125,16 @@ export function FollowingFeed() {
           />
         )}
         ListFooterComponent={
-          loadingMore ? <ActivityIndicator style={{ padding: 16 }} color={theme.textSecondary} /> : null
+          loadingMore ? (
+            <ActivityIndicator style={{ padding: 16 }} color={theme.textSecondary} />
+          ) : atEnd && cards.length > 0 ? (
+            <View style={styles.caughtUp} accessibilityRole="text">
+              <Ionicons name="checkmark-circle-outline" size={28} color={theme.textSecondary} />
+              <ThemedText type="smallBold" themeColor="textSecondary">
+                You&apos;re all caught up
+              </ThemedText>
+            </View>
+          ) : null
         }
       />
 
@@ -162,9 +173,10 @@ const FeedCard = memo(function FeedCard({
   const router = useRouter();
   const { width: winW } = useWindowDimensions();
   const [page, setPage] = useState(0);
-  // Pre-fill the heart if you already swiped right on this post (e.g. from the main deck).
-  const [liked, setLiked] = useState(card.my_direction === 'right');
-  const [likeCount, setLikeCount] = useState(card.like_count);
+  // The heart reflects FEED likes only; the shown count is deck + feed likes
+  // combined (a like is a like to viewers — creators see the split in analytics).
+  const [liked, setLiked] = useState(Boolean(card.my_feed_like));
+  const [likeCount, setLikeCount] = useState(card.like_count + (card.feed_like_count ?? 0));
   const [saveOpen, setSaveOpen] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -178,16 +190,25 @@ const FeedCard = memo(function FeedCard({
     };
   }, [card.id]);
 
-  // Like = a private right-swipe (same commit path as the deck). One-way for now.
-  const like = () => {
-    if (liked) return;
-    setLiked(true);
-    setLikeCount((n) => n + 1);
-    recordSwipe(card.id, 'right').catch(() => {
-      setLiked(false);
-      setLikeCount((n) => Math.max(0, n - 1));
+  // Heart toggle: a FEED like (post_likes), never a deck swipe. Optimistic; reverts on failure.
+  const toggle = () => {
+    const next = !liked;
+    setLiked(next);
+    setLikeCount((n) => Math.max(0, n + (next ? 1 : -1)));
+    toggleFeedLike(card.id).catch(() => {
+      setLiked(!next);
+      setLikeCount((n) => Math.max(0, n + (next ? -1 : 1)));
     });
   };
+
+  // Double-tapping the media likes (never unlikes), like Instagram.
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .maxDuration(260)
+    .runOnJS(true)
+    .onEnd(() => {
+      if (!liked) toggle();
+    });
 
   return (
     <View style={[styles.card, { borderBottomColor: theme.border }]}>
@@ -207,6 +228,7 @@ const FeedCard = memo(function FeedCard({
         </View>
       </Pressable>
 
+      <GestureDetector gesture={doubleTap}>
       {extras.length === 0 ? (
         card.media_type === 'video' ? (
           <FeedVideo uri={card.media_url} overlays={card.overlays} />
@@ -248,9 +270,10 @@ const FeedCard = memo(function FeedCard({
           </View>
         </View>
       )}
+      </GestureDetector>
 
       <View style={styles.actions}>
-        <Pressable onPress={like} hitSlop={8} style={styles.actionBtn} accessibilityRole="button" accessibilityLabel="Like">
+        <Pressable onPress={toggle} hitSlop={8} style={styles.actionBtn} accessibilityRole="button" accessibilityLabel={liked ? 'Unlike' : 'Like'}>
           <Ionicons name={liked ? 'heart' : 'heart-outline'} size={24} color={liked ? BRAND.accent : theme.text} />
           <ThemedText type="smallBold">{formatCount(likeCount)}</ThemedText>
         </Pressable>
@@ -323,5 +346,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center', gap: 20, paddingHorizontal: 14, paddingTop: 10 },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   caption: { paddingHorizontal: 14, paddingTop: 8 },
+  caughtUp: { alignItems: 'center', gap: 6, paddingVertical: 28 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 14, paddingTop: 6 },
 });

@@ -18,8 +18,10 @@ export type DeckCard = {
   poster_display_name: string;
   poster_avatar_url: string | null;
   tags: string[];
-  /** The caller's own swipe on this post, if any (Following feed uses it to pre-fill the heart). */
-  my_direction?: 'left' | 'right' | null;
+  /** Friends-feed heart likes (separate from deck like_count by design, brief 2A). */
+  feed_like_count?: number;
+  /** Whether the caller has hearted this post in the friends feed. */
+  my_feed_like?: boolean;
   /** Total media items (1 = single). >1 means a carousel; set by resolveDeckMedia. */
   media_count?: number;
   /** Full ordered media (cover first) — only set when this is a carousel. */
@@ -127,6 +129,20 @@ export async function recordSwipe(postId: string, direction: SwipeDirection): Pr
   });
   if (error) throw error;
   return Number(data ?? 0);
+}
+
+/**
+ * Heart (or un-heart) a post in the friends feed. NOT a deck swipe: it keeps its
+ * own counter, earns no points, and never consumes the post from the deck
+ * (brief 2A). Returns the new state and the feed-like counter.
+ */
+export async function toggleFeedLike(
+  postId: string,
+): Promise<{ liked: boolean; feed_like_count: number }> {
+  const { data, error } = await supabase.rpc('toggle_feed_like', { _post_id: postId });
+  if (error) throw error;
+  const row = (data?.[0] ?? {}) as { liked?: boolean; feed_like_count?: number };
+  return { liked: Boolean(row.liked), feed_like_count: Number(row.feed_like_count ?? 0) };
 }
 
 /** Reverse a single swipe: deletes the swipe row and posts a compensating ledger entry. */
