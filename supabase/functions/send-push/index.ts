@@ -30,6 +30,8 @@ const CATEGORY: Record<string, string | null> = {
   message: 'messages',
   mention: 'comments',
   moderation: null,
+  new_login: null, // security: always delivered, even in quiet hours
+  team_invite: null,
 };
 
 type Notification = {
@@ -67,6 +69,13 @@ Deno.serve(withSentry('send-push', async (req) => {
     const { data: pref } = await svc.from('notification_prefs').select('prefs').eq('user_id', notif.user_id).maybeSingle();
     const prefs = (pref?.prefs ?? {}) as Record<string, boolean>;
     if (prefs[category] === false) return json({ skipped: 'category_disabled' });
+  }
+
+  // Part 14D: quiet mode — routine pushes hold during the user's quiet hours.
+  // Security alerts (new_login) always go out.
+  if (notif.type !== 'new_login') {
+    const { data: quiet } = await svc.rpc('_in_quiet_hours', { _uid: notif.user_id });
+    if (quiet === true) return json({ skipped: 'quiet_hours' });
   }
 
   // ---- recipient's device tokens + badge ----
@@ -155,6 +164,14 @@ function compose(n: Notification, actor: string): { title: string; body: string 
     case 'message': return { title: at, body: n.count > 1 ? `${n.count} new messages` : 'Sent you a message' };
     case 'mention': return { title: 'Mentioned you', body: `${at} mentioned you` };
     case 'moderation': return moderationMsg(String(n.payload.status ?? ''));
+    case 'new_login': return {
+      title: 'New login to your account',
+      body: `Your account was just used on a new ${String(n.payload.platform ?? '')} device. Not you? Open Phixr to secure your account.`,
+    };
+    case 'team_invite': return {
+      title: 'Team invite',
+      body: `${at} invited you to help run their business (${String(n.payload.role ?? 'team')})`,
+    };
     default: return { title: 'Phixr', body: 'You have a new notification' };
   }
 }

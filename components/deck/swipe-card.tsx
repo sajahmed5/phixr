@@ -30,6 +30,8 @@ export const SwipeCard = memo(function SwipeCard({
   onOpenTag,
   canUndo,
   onUndo,
+  onMenu,
+  hideCounts,
 }: {
   card: DeckCard;
   isActive: boolean;
@@ -45,6 +47,10 @@ export const SwipeCard = memo(function SwipeCard({
   onOpenTag?: (tag: string) => void;
   canUndo?: boolean;
   onUndo?: () => void;
+  /** Part 14A: card options (not interested / show more). */
+  onMenu?: () => void;
+  /** Part 14D: viewer hides like counts on other people's posts. */
+  hideCounts?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const [scrimBox, setScrimBox] = useState({ w: 0, h: 0 });
@@ -77,7 +83,7 @@ export const SwipeCard = memo(function SwipeCard({
       <View style={styles.topRight}>
         <ActionStat
           icon="heart"
-          value={card.like_count}
+          value={hideCounts ? null : card.like_count}
           onPress={onLike}
           label="Like this post"
         />
@@ -99,6 +105,16 @@ export const SwipeCard = memo(function SwipeCard({
             {formatCount(card.comment_count)}
           </ThemedText>
         </Pressable>
+        {onMenu ? (
+          <Pressable
+            onPress={onMenu}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Post options"
+            style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.6 }]}>
+            <Ionicons name="ellipsis-horizontal" size={20} color={BRAND.accent} style={styles.railIcon} />
+          </Pressable>
+        ) : null}
         {onUndo ? (
           <Pressable
             onPress={onUndo}
@@ -234,7 +250,8 @@ function ActionStat({
   label,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
-  value: number;
+  /** null/undefined = count hidden (poster or viewer choice, Part 14D). */
+  value: number | null | undefined;
   onPress?: () => void;
   label: string;
 }) {
@@ -247,9 +264,11 @@ function ActionStat({
       accessibilityLabel={label}
       style={({ pressed }) => [styles.stat, pressed && { opacity: 0.6 }]}>
       <Ionicons name={icon} size={20} color={BRAND.accent} style={styles.railIcon} />
-      <ThemedText type="small" style={styles.statText}>
-        {formatCount(value)}
-      </ThemedText>
+      {value == null ? null : (
+        <ThemedText type="small" style={styles.statText}>
+          {formatCount(value)}
+        </ThemedText>
+      )}
     </Pressable>
   );
 }

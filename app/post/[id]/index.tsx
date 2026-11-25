@@ -7,6 +7,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, useWindowD
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { CollectionPicker } from '@/components/collection-picker';
+import { ShareSheet } from '@/components/share-sheet';
 import { CommentSheet } from '@/components/comments/comment-sheet';
 import { MentionText } from '@/components/mention-text';
 import { PostAnalyticsCard } from '@/components/profile/post-analytics-card';
@@ -31,7 +32,8 @@ import { parseVideoOverlays } from '@/lib/video-overlays';
 import { confirm } from '@/lib/confirm';
 import { recordSwipe, undoSwipe } from '@/lib/deck';
 import { formatCount } from '@/lib/format';
-import { deletePost, getMyPosts, getPostDetail, getPostExtras, POST_REPORT_REASONS, reportPost, type PostDetail, type PostMediaItem } from '@/lib/posts';
+import { deletePost, getMyPosts, getPostDetail, getPostExtras, getVideoCaptions, POST_REPORT_REASONS, reportPost, setVideoCaptions, type PostDetail, type PostMediaItem } from '@/lib/posts';
+import { downloadOwnPostMedia } from '@/lib/share';
 
 /** How many comments to show inline before "View all". Two fits without pushing the
  *  rest of the post off-screen. */
@@ -59,6 +61,11 @@ export default function PostViewScreen() {
   const [revealed, setRevealed] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Part 14E: share (audience-gated), download-own, video captions.
+  const [shareOpen, setShareOpen] = useState(false);
+  const [captions, setCaptions] = useState<string | null>(null);
+  const [captionsOpen, setCaptionsOpen] = useState(false);
+  const [captionsDraft, setCaptionsDraft] = useState('');
   // Local like/skip state so the viewer can toggle (like ↔ unlike, skip ↔ un-skip).
   const [myDir, setMyDir] = useState<'left' | 'right' | null>(null);
   const [likeCount, setLikeCount] = useState(0);
@@ -67,6 +74,11 @@ export default function PostViewScreen() {
   const [siblings, setSiblings] = useState<string[]>([]);
 
   const isOwner = !!post && post.user_id === user?.id;
+  useEffect(() => {
+    if (post?.media_type === 'video') {
+      void getVideoCaptions(post.id).then(setCaptions).catch(() => {});
+    }
+  }, [post?.id, post?.media_type]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mirror of loaded post
     setPinned(!!(post as unknown as { pinned_at?: string | null })?.pinned_at);
@@ -342,6 +354,13 @@ export default function PostViewScreen() {
             tint={theme.textSecondary}
             onPress={() => setCommentsOpen(true)}
           />
+          <Pressable
+            onPress={() => setShareOpen(true)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Share this post">
+            <Ionicons name="share-outline" size={22} color={theme.textSecondary} />
+          </Pressable>
           <View style={{ flex: 1 }} />
           {isOwnPost ? (
             <Pressable
@@ -354,6 +373,14 @@ export default function PostViewScreen() {
           ) : null}
         </View>
 
+        {captions ? (
+          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
+            <Ionicons name="text-outline" size={14} color={theme.textSecondary} style={{ marginTop: 2 }} />
+            <ThemedText type="small" themeColor="textSecondary" style={{ flex: 1 }}>
+              {captions}
+            </ThemedText>
+          </View>
+        ) : null}
         {partnerLabel ? (
           <ThemedText type="smallBold" themeColor="textSecondary">
             {partnerLabel}
@@ -503,6 +530,46 @@ export default function PostViewScreen() {
 
       <CollectionPicker postId={post.id} visible={saveOpen} onClose={() => setSaveOpen(false)} onChange={setSaved} />
 
+      {/* Part 14E: audience rules — only PUBLIC posts may leave the app. */}
+      {shareOpen ? (
+        <ShareSheet
+          post={{ id: post.id, caption: post.caption }}
+          allowExternal={post.visibility === 'public'}
+          onClose={() => setShareOpen(false)}
+        />
+      ) : null}
+
+      {captionsOpen ? (
+        <View style={[stylesCollab.sheet, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <ThemedText type="smallBold">Video captions</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            Shown with your video for people watching without sound.
+          </ThemedText>
+          <TextField
+            label=""
+            placeholder="What's said or shown in the video"
+            value={captionsDraft}
+            onChangeText={setCaptionsDraft}
+            multiline
+          />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <Button
+              title="Save"
+              onPress={async () => {
+                try {
+                  await setVideoCaptions(post.id, captionsDraft.trim() || null);
+                  setCaptions(captionsDraft.trim() || null);
+                  setCaptionsOpen(false);
+                } catch (e) {
+                  Alert.alert("Couldn't save", e instanceof Error ? e.message : 'Try again.');
+                }
+              }}
+            />
+            <Button title="Cancel" variant="secondary" onPress={() => setCaptionsOpen(false)} />
+          </View>
+        </View>
+      ) : null}
+
       {collabInviteOpen ? (
         <View style={[stylesCollab.sheet, { backgroundColor: theme.background, borderColor: theme.border }]}>
           <ThemedText type="smallBold">Invite a co-author</ThemedText>
@@ -556,6 +623,27 @@ export default function PostViewScreen() {
             label: 'Invite co-author…',
             onPress: () => setCollabInviteOpen(true),
           },
+          {
+            label: 'Download post',
+            onPress: async () => {
+              try {
+                await downloadOwnPostMedia(post.media_url, post.media_type);
+              } catch {
+                Alert.alert("Couldn't download", 'Please try again.');
+              }
+            },
+          },
+          ...(post.media_type === 'video'
+            ? [
+                {
+                  label: captions ? 'Edit captions…' : 'Add captions…',
+                  onPress: () => {
+                    setCaptionsDraft(captions ?? '');
+                    setCaptionsOpen(true);
+                  },
+                },
+              ]
+            : []),
           {
             label: 'Delete post',
             destructive: true,

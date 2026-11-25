@@ -8,12 +8,17 @@ import { ThemedText } from '@/components/themed-text';
 import { STORY_RING_SEEN } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { getStoriesRail, type RailItem } from '@/lib/stories';
+import { supabase } from '@/lib/supabase';
 
 const RING = 64;
+// Part 14B: close-friends green — OWNER-ONLY. Viewers always get the normal
+// ring; nothing in any payload tells a viewer a story is group-limited.
+const RING_CLOSE_FRIENDS = '#2E7D46';
 
 export function StoriesRail() {
   const theme = useTheme();
   const [items, setItems] = useState<RailItem[]>([]);
+  const [ownGroupStory, setOwnGroupStory] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -21,6 +26,19 @@ export function StoriesRail() {
       void getStoriesRail()
         .then((r) => alive && setItems(r))
         .catch(() => {});
+      // Own stories only (RLS): is any live one group-limited? Owner ring hint.
+      void (async () => {
+        const { data: u } = await supabase.auth.getUser();
+        if (!u.user) return;
+        const { data } = await supabase
+          .from('stories')
+          .select('audience')
+          .eq('user_id', u.user.id)
+          .gt('expires_at', new Date().toISOString())
+          .eq('audience', 'groups')
+          .limit(1);
+        if (alive) setOwnGroupStory((data ?? []).length > 0);
+      })();
       return () => {
         alive = false;
       };
@@ -44,13 +62,20 @@ export function StoriesRail() {
           <View
             style={[
               styles.ring,
-              // Your own posted story gets a bright ring so you can tell it's live.
-              { borderColor: self?.has_story ? theme.tint : 'transparent' },
+              // Your own posted story gets a bright ring so you can tell it's live;
+              // green means it's limited to your groups (ONLY YOU ever see this).
+              { borderColor: self?.has_story ? (ownGroupStory ? RING_CLOSE_FRIENDS : theme.tint) : 'transparent' },
             ]}>
             <Pressable
               onPress={() => (self?.has_story ? openViewer(self.user_id) : create())}
               accessibilityRole="button"
-              accessibilityLabel={self?.has_story ? 'View your story' : 'Add to your story'}>
+              accessibilityLabel={
+                self?.has_story
+                  ? ownGroupStory
+                    ? 'View your story (shared with your groups only)'
+                    : 'View your story'
+                  : 'Add to your story'
+              }>
               <Avatar uri={self?.avatar_url} theme={theme} />
             </Pressable>
             <Pressable

@@ -273,3 +273,18 @@ export async function updatePost(id: string, input: UpdatePostInput): Promise<vo
     if (insErr) throw insErr;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Part 14E accessibility: creator-editable video captions. Auto-generation
+// plugs in later through the same set function.
+// ---------------------------------------------------------------------------
+export async function getVideoCaptions(postId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('get_video_captions', { _post_id: postId });
+  if (error) throw error;
+  return (data as string | null) ?? null;
+}
+
+export async function setVideoCaptions(postId: string, captions: string | null): Promise<void> {
+  const { error } = await supabase.rpc('set_video_captions', { _post_id: postId, _captions: captions });
+  if (error) throw error;
+}

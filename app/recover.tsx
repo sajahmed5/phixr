@@ -48,6 +48,10 @@ export default function RecoverScreen() {
           We don&apos;t use SMS recovery: a phone number is never collected, which removes a common
           account-takeover route.
         </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          If you use two-step login, keep your backup codes safe — they&apos;re the self-serve way
+          back in. Support never turns off two-step login from an email request alone.
+        </ThemedText>
         <Button title="Contact support" onPress={contact} />
       </ScrollView>
     </ThemedView>

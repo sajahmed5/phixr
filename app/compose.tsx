@@ -337,6 +337,11 @@ export default function ComposeScreen() {
               style={styles.multiline}
             />
             <Counter value={draft.altText.length} max={ALT_MAX} />
+            {!draft.altText.trim() ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                A line of alt text makes this post work for people using screen readers.
+              </ThemedText>
+            ) : null}
           </View>
 
           {/* Audience (brief 4A): Everyone / Followers / Groups, defaulting to the

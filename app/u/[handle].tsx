@@ -229,6 +229,14 @@ export default function PublicProfileScreen() {
           overview.is_blocked
             ? [{ label: 'Unblock', onPress: unblockFlow }]
             : [
+                {
+                  label: 'Share profile',
+                  onPress: () => {
+                    void import('@/lib/share').then(({ shareProfile }) =>
+                      shareProfile(overview.handle, overview.display_name),
+                    );
+                  },
+                },
                 { label: 'Report', onPress: () => setReportOpen(true) },
                 { label: overview.is_muting ? 'Unmute' : 'Mute', onPress: toggleMute },
                 { label: 'Block', destructive: true, onPress: blockFlow },
