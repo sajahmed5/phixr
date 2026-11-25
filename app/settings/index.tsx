@@ -23,10 +23,12 @@ import { useAuth } from '@/lib/auth-context';
 import { confirm } from '@/lib/confirm';
 import {
   deleteAccount,
+  getHideLikes,
   getNotificationPrefs,
   requestDataExport,
   setAllPostsVisibility,
   setFollowApproval,
+  setHideLikes,
   setNotificationPrefs,
   setPrivacy,
   setSearchRadius,
@@ -54,8 +56,19 @@ export default function SettingsScreen() {
     await analytics.setOptOut(!v);
   }
 
+  const [hideLikes, setHideLikesState] = useState(false);
+  async function toggleHideLikes(v: boolean) {
+    setHideLikesState(v);
+    try {
+      await setHideLikes(v);
+    } catch {
+      setHideLikesState(!v);
+    }
+  }
+
   const loadPrefs = useCallback(async () => {
     setPrefs(await getNotificationPrefs().catch(() => null));
+    setHideLikesState(await getHideLikes().catch(() => false));
   }, []);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mount data-loader
@@ -158,6 +171,17 @@ export default function SettingsScreen() {
             sublabel="Helps improve Phixr. Never your identity, and never which posts you swipe."
             value={shareUsage}
             onValueChange={toggleUsage}
+          />
+          <ToggleRow
+            label="Hide my likes"
+            sublabel="Creators won't see your name in their likers lists or notifications. Your likes still count in totals."
+            value={hideLikes}
+            onValueChange={toggleHideLikes}
+          />
+          <LinkRow
+            icon="people-outline"
+            label="Audience groups"
+            onPress={() => router.push('/settings/groups')}
           />
           {/* Phrased as the positive ("accept automatically") rather than the stored
               column ("require approval"), so the switch reads the way people expect.

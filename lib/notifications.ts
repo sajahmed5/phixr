@@ -15,7 +15,8 @@ export type NotificationType =
   | 'reach_milestone'
   | 'moderation'
   | 'message'
-  | 'mention';
+  | 'mention'
+  | 'like';
 
 export type InboxNotification = {
   id: string;

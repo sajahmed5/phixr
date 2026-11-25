@@ -457,6 +457,28 @@ export async function getTagReach(): Promise<TagReach[]> {
 
 // ---- Settings actions ------------------------------------------------------
 
+/** "Hide my likes from creators' likers lists" (Part 4B). Default off. */
+export async function setHideLikes(hide: boolean): Promise<void> {
+  const { data: u } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from('profiles')
+    .update({ hide_likes: hide })
+    .eq('id', u.user!.id);
+  if (error) throw error;
+}
+
+/** Read the caller's own hide_likes flag (for the settings toggle). */
+export async function getHideLikes(): Promise<boolean> {
+  const { data: u } = await supabase.auth.getUser();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('hide_likes')
+    .eq('id', u.user!.id)
+    .single();
+  if (error) throw error;
+  return Boolean((data as { hide_likes: boolean }).hide_likes);
+}
+
 export async function changePassword(newPassword: string): Promise<void> {
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw error;

@@ -145,6 +145,36 @@ export async function toggleFeedLike(
   return { liked: Boolean(row.liked), feed_like_count: Number(row.feed_like_count ?? 0) };
 }
 
+/** One row of a post's likers list (owner-only; Part 4B). */
+export type PostLiker = {
+  user_id: string;
+  handle: string;
+  display_name: string;
+  avatar_url: string | null;
+  verified: boolean;
+  liked_at: string;
+  source: 'deck' | 'feed';
+};
+
+/**
+ * Who liked YOUR post (deck likes + feed hearts, newest first, deduped).
+ * The server refuses anyone but the post owner, and leaves out users who
+ * turned on "Hide my likes". Left swipes have no equivalent — ever.
+ */
+export async function getPostLikers(
+  postId: string,
+  before: string | null = null,
+  limit = 30,
+): Promise<PostLiker[]> {
+  const { data, error } = await supabase.rpc('get_post_likers', {
+    _post_id: postId,
+    _before: before,
+    _limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as PostLiker[];
+}
+
 /** Reverse a single swipe: deletes the swipe row and posts a compensating ledger entry. */
 export async function undoSwipe(postId: string): Promise<number> {
   const { data, error } = await supabase.rpc('undo_swipe', { _post_id: postId });
