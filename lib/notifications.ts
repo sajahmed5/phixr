@@ -19,7 +19,10 @@ export type NotificationType =
   | 'like'
   | 'report_update'
   | 'partnership_request'
-  | 'partnership_update';
+  | 'partnership_update'
+  | 'schedule_update'
+  | 'collab_invite'
+  | 'collab_update';
 
 export type InboxNotification = {
   id: string;

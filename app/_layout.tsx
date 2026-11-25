@@ -177,6 +177,9 @@ function RootNavigator() {
       />
       <Stack.Screen name="appeal" options={{ presentation: 'modal', headerShown: true, title: 'Appeal' }} />
       <Stack.Screen name="add-account" options={{ presentation: 'modal', headerShown: true, title: 'Add account' }} />
+      <Stack.Screen name="drafts" options={{ headerShown: true, title: 'Drafts' }} />
+      <Stack.Screen name="schedule" options={{ headerShown: true, title: 'Content calendar' }} />
+      <Stack.Screen name="settings/creator-tools" options={{ headerShown: true, title: 'Creator tools' }} />
       <Stack.Screen name="settings/sessions" options={{ headerShown: true, title: 'Devices & sessions' }} />
       <Stack.Screen name="recover" options={{ headerShown: true, title: 'Account recovery' }} />
     </Stack>

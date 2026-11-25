@@ -323,6 +323,11 @@ export default function SettingsScreen() {
 
         <Group title="Account">
           <LinkRow
+            icon="construct-outline"
+            label="Creator tools"
+            onPress={() => router.push('/settings/creator-tools')}
+          />
+          <LinkRow
             icon="briefcase-outline"
             label="Business account"
             onPress={() => router.push('/settings/business')}

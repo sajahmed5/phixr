@@ -19,5 +19,5 @@ revoke select on table public.profiles from authenticated;
 grant select (
   id, handle, display_name, bio, avatar_url,
   is_private, verified, account_type, account_status,
-  age_band, created_at
+  age_band, created_at, category
 ) on table public.profiles to authenticated;

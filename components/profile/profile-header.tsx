@@ -16,6 +16,8 @@ type Props = {
   onPressPoints?: () => void;
   /** Part 11: set on the own-profile tab — tapping the name opens the switcher. */
   onPressIdentity?: () => void;
+  /** Part 12C: profile category shown under the name. */
+  category?: string | null;
   /** Action row (settings gear / follow button / overflow), rendered top-right + below. */
   action?: React.ReactNode;
 };
@@ -27,6 +29,7 @@ export function ProfileHeader({
   points,
   onPressPoints,
   onPressIdentity,
+  category,
   action,
 }: Props) {
   const showPointsHero = points != null;
@@ -74,6 +77,7 @@ export function ProfileHeader({
         </Pressable>
         <ThemedText type="small" themeColor="textSecondary">
           @{profile.handle}
+          {category ? `  ·  ${category}` : ''}
           {profile.is_private ? '  ·  Private' : ''}
         </ThemedText>
         {showPointsHero ? (

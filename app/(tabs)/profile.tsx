@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccountSwitcher } from '@/components/account-switcher';
+import { HighlightsRail, ProfileLinksRow } from '@/components/profile/showcase-sections';
 import { ProfileHeader } from '@/components/profile/profile-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -39,7 +40,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { profile: authProfile } = useAuth();
+  const { profile: authProfile, user } = useAuth();
   const handle = authProfile?.handle;
 
   const [overview, setOverview] = useState<ProfileOverview | null>(null);
@@ -179,11 +180,20 @@ export default function ProfileScreen() {
         points={authProfile?.points_balance ?? 0}
         onPressPoints={() => router.push('/points')}
         onPressIdentity={() => setSwitcherOpen(true)}
+        category={(authProfile as { category?: string | null } | null)?.category ?? null}
         onPressFollowers={() => goConnections('followers')}
         onPressFollowing={() => goConnections('following')}
         action={
           <View style={styles.actions}>
             <ActionButton icon="create-outline" label="Edit profile" onPress={() => router.push('/profile/edit')} />
+      {user?.id ? (
+        <>
+          <ProfileLinksRow userId={user.id} />
+          <HighlightsRail userId={user.id} isOwner />
+        </>
+      ) : null}
+            <ActionButton icon="albums-outline" label="Drafts" onPress={() => router.push('/drafts')} />
+            <ActionButton icon="calendar-outline" label="Scheduled" onPress={() => router.push('/schedule')} />
             <ActionButton icon="bar-chart-outline" label="Analytics" onPress={() => router.push('/analytics')} />
             <ActionButton icon="person-add-outline" label="Requests" badge={requestCount} onPress={() => router.push('/profile/requests')} />
           </View>

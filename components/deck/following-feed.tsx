@@ -142,6 +142,7 @@ export function FollowingFeed() {
       {commentsFor ? (
         <CommentSheet
           postId={commentsFor.id}
+          postOwnerId={commentsFor.user_id}
           onClose={() => setCommentsFor(null)}
           onCountDelta={(d) => bumpComments(commentsFor.id, d)}
         />

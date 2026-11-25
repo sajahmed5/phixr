@@ -99,6 +99,7 @@ export function DeckView({ fetchBatch, header, renderEmpty, hasTabBar = true }: 
       {commentsCard ? (
         <CommentSheet
           postId={commentsCard.id}
+          postOwnerId={commentsCard.user_id}
           onClose={() => setCommentsCard(null)}
           onCountDelta={(delta) => adjustCommentCount(commentsCard.id, delta)}
         />

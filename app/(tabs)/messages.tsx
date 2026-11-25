@@ -31,7 +31,9 @@ export default function MessagesScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [items, setItems] = useState<Conversation[]>([]);
-  const [tab, setTab] = useState<'messages' | 'requests'>('messages');
+  const [tab, setTab] = useState<'messages' | 'general' | 'requests'>('messages');
+  // Part 12E: per-conversation folder (Primary = 'messages' tab, General, Requests).
+  const [folders, setFolders] = useState<Map<string, string>>(new Map());
   const [showArchived, setShowArchived] = useState(false);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,12 @@ export default function MessagesScreen() {
 
   const load = useCallback(async () => {
     try {
-      setItems(await getConversations());
+      const [convos, f] = await Promise.all([
+        getConversations(),
+        import('@/lib/showcase').then((m) => m.getMyFolders()).catch(() => new Map<string, string>()),
+      ]);
+      setItems(convos);
+      setFolders(f);
     } catch {
       /* keep */
     } finally {
@@ -64,11 +71,14 @@ export default function MessagesScreen() {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items
-      .filter((c) =>
-        showArchived
-          ? c.archived && !c.is_request
-          : !c.archived && (tab === 'requests' ? c.is_request : !c.is_request),
-      )
+      .filter((c) => {
+        if (showArchived) return c.archived && !c.is_request;
+        if (c.archived) return false;
+        if (tab === 'requests') return c.is_request;
+        if (c.is_request) return false;
+        const folder = folders.get(c.id) ?? 'primary';
+        return tab === 'general' ? folder === 'general' : folder !== 'general';
+      })
       .filter((c) => {
         if (!q) return true;
         const name = c.type === 'group' ? c.name ?? 'Group' : c.other_display_name ?? '';
@@ -78,12 +88,12 @@ export default function MessagesScreen() {
           (c.last_body ?? '').toLowerCase().includes(q)
         );
       });
-  }, [items, tab, query, showArchived]);
+  }, [items, tab, query, showArchived, folders]);
 
   return (
     <ThemedView style={{ flex: 1 }}>
       <View style={styles.tabs}>
-        {(['messages', 'requests'] as const).map((t) => (
+        {(['messages', 'general', 'requests'] as const).map((t) => (
           <Pressable
             key={t}
             onPress={() => {
@@ -92,7 +102,7 @@ export default function MessagesScreen() {
             }}
             style={[styles.tab, !showArchived && tab === t && { borderBottomColor: theme.tint, borderBottomWidth: 2 }]}>
             <ThemedText type="smallBold" style={{ color: !showArchived && tab === t ? theme.text : theme.textSecondary }}>
-              {t === 'messages' ? 'Messages' : `Requests${requestCount ? ` (${requestCount})` : ''}`}
+              {t === 'messages' ? 'Primary' : t === 'general' ? 'General' : `Requests${requestCount ? ` (${requestCount})` : ''}`}
             </ThemedText>
           </Pressable>
         ))}
@@ -162,6 +172,13 @@ export default function MessagesScreen() {
                 await setConversationPinned(item.id, !item.pinned);
                 void load();
               }}
+              folder={(folders.get(item.id) ?? 'primary') as 'primary' | 'general'}
+              onMoveFolder={async () => {
+                const { setConversationFolder } = await import('@/lib/showcase');
+                const next = (folders.get(item.id) ?? 'primary') === 'general' ? 'primary' : 'general';
+                await setConversationFolder(item.id, next);
+                void load();
+              }}
               openRowRef={openRow}
             />
           )}
@@ -192,6 +209,8 @@ function ConversationRow({
   onUnread,
   onArchive,
   onPin,
+  folder,
+  onMoveFolder,
   openRowRef,
 }: {
   conversation: Conversation;
@@ -202,6 +221,9 @@ function ConversationRow({
   onUnread: () => void;
   onArchive: () => void;
   onPin: () => void;
+  /** Part 12E: Primary/General folder + manual move. */
+  folder: 'primary' | 'general';
+  onMoveFolder: () => void;
   openRowRef: React.MutableRefObject<Swipeable | null>;
 }) {
   const theme = useTheme();
@@ -254,6 +276,15 @@ function ConversationRow({
             style={[styles.action, { backgroundColor: theme.backgroundElement }]}>
             <Ionicons name={c.pinned ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'} size={18} color={theme.text} />
             <ThemedText type="small">{c.pinned ? 'Unpin' : 'Pin'}</ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              rowRef.current?.close();
+              onMoveFolder();
+            }}
+            style={[styles.action, { backgroundColor: theme.backgroundElement }]}>
+            <Ionicons name="folder-outline" size={18} color={theme.text} />
+            <ThemedText type="small">{folder === 'general' ? 'To Primary' : 'To General'}</ThemedText>
           </Pressable>
           <Pressable
             onPress={() => {

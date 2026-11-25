@@ -76,6 +76,12 @@ export default function NotificationsScreen() {
       return router.push(`/post/${n.post_id}`);
     if (n.type === 'mention' && n.actor_handle) return router.push(`/u/${n.actor_handle}`);
     if (n.type === 'partnership_request') return router.push('/settings/partnerships');
+    if (n.type === 'schedule_update') {
+      if (n.post_id) return router.push(`/post/${n.post_id}`);
+      return router.push('/schedule');
+    }
+    if ((n.type === 'collab_invite' || n.type === 'collab_update') && n.post_id)
+      return router.push(`/post/${n.post_id}`);
     if (n.type === 'partnership_update' && n.post_id) return router.push(`/post/${n.post_id}`);
   }
 
@@ -207,6 +213,20 @@ function message(n: InboxNotification): string {
             : 'Post update';
     case 'partnership_request':
       return 'wants to name your business in a paid partnership';
+    case 'schedule_update':
+      return n.payload.outcome === 'published'
+        ? (n.payload.kind === 'story' ? 'Your scheduled story is live' : 'Your scheduled post is live')
+        : n.payload.outcome === 'held'
+          ? 'Your scheduled post is held for review'
+          : `Your scheduled post failed: ${String(n.payload.reason ?? 'unknown reason')}`;
+    case 'collab_invite':
+      return 'invited you to be a co-author';
+    case 'collab_update':
+      return n.payload.left === true
+        ? 'left your collab post'
+        : n.payload.accepted === true
+          ? 'accepted your co-author invite'
+          : 'declined your co-author invite';
     case 'partnership_update':
       return n.payload.revoked === true
         ? 'withdrew their name from your paid partnership'

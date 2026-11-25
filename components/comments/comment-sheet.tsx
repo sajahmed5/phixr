@@ -31,6 +31,7 @@ import { CommentItem } from '@/components/comments/comment-item';
 import { ReportFab } from '@/components/report-issue';
 import { ThemedText } from '@/components/themed-text';
 import { ActionMenu, type ActionOption } from '@/components/ui/action-menu';
+import { useAuth } from '@/lib/auth-context';
 import { FormMessage } from '@/components/ui/form-message';
 import { confirm } from '@/lib/confirm';
 import { useAndroidBack } from '@/lib/use-android-back';
@@ -49,10 +50,13 @@ const REPORT_REASONS = [
 
 export function CommentSheet({
   postId,
+  postOwnerId,
   onClose,
   onCountDelta,
 }: {
   postId: string;
+  /** Part 12E: lets the post owner pin comments from the ⋯ menu. */
+  postOwnerId?: string;
   onClose: () => void;
   onCountDelta?: (delta: number) => void;
 }) {
@@ -123,11 +127,29 @@ export function CommentSheet({
 
   const onMore = useCallback((comment: CommentView) => setMoreTarget(comment), []);
 
+  const { user: me } = useAuth();
   const moreOptions = useCallback((): ActionOption[] => {
     const t = moreTarget;
     if (!t) return [];
+    // Part 12E: the POST owner can pin up to comment_pins_max comments.
+    const pinOption: ActionOption[] =
+      postOwnerId && me?.id === postOwnerId
+        ? [{
+            label: (t as unknown as { pinned_at?: string | null }).pinned_at ? 'Unpin comment' : 'Pin comment',
+            onPress: async () => {
+              try {
+                const { pinComment } = await import('@/lib/showcase');
+                await pinComment(t.id, !(t as unknown as { pinned_at?: string | null }).pinned_at);
+                c.load();
+              } catch (e) {
+                setNotice(e instanceof Error ? e.message : "Couldn't pin.");
+              }
+            },
+          }]
+        : [];
     if (t.is_own) {
       return [
+        ...pinOption,
         { label: 'Edit', onPress: () => setEditTarget(t) },
         {
           label: 'Delete',
@@ -145,6 +167,7 @@ export function CommentSheet({
       ];
     }
     return [
+      ...pinOption,
       { label: 'Report', onPress: () => setReportTarget(t) },
       {
         label: `Block @${t.author_handle}`,
@@ -167,7 +190,7 @@ export function CommentSheet({
         },
       },
     ];
-  }, [moreTarget, c]);
+  }, [moreTarget, c, me?.id, postOwnerId]);
 
   const submitComposer = useCallback(
     async (text: string) => {
