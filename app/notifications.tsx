@@ -85,6 +85,7 @@ export default function NotificationsScreen() {
     if ((n.type === 'collab_invite' || n.type === 'collab_update') && n.post_id)
       return router.push(`/post/${n.post_id}`);
     if (n.type === 'partnership_update' && n.post_id) return router.push(`/post/${n.post_id}`);
+    if (n.type === 'creator_digest') return router.push('/analytics');
     if (n.type === 'new_login') {
       // Part 14C: "This wasn't me" → sign out EVERYWHERE + password-reset email.
       Alert.alert(
@@ -170,14 +171,42 @@ export default function NotificationsScreen() {
         </View>
       ) : (
         <FlatList
-          data={rows}
-          keyExtractor={(n) => n.id}
-          renderItem={({ item }) => <Row n={item} onPress={() => open(item)} />}
+          data={grouped(rows)}
+          keyExtractor={(it) => ('header' in it ? `h-${it.header}` : it.id)}
+          renderItem={({ item }) =>
+            'header' in item ? (
+              <ThemedText type="smallBold" themeColor="textSecondary" style={styles.groupHeader}>
+                {item.header}
+              </ThemedText>
+            ) : (
+              <Row n={item} onPress={() => open(item)} />
+            )
+          }
           refreshControl={<RefreshControl {...refresh} tintColor={theme.textSecondary} />}
         />
       )}
     </ThemedView>
   );
+}
+
+// Part 15: the activity tab groups by time — Today / This week / Earlier.
+type GroupedRow = InboxNotification | { header: string };
+function grouped(rows: InboxNotification[]): GroupedRow[] {
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const weekAgo = startOfDay - 6 * 24 * 3600 * 1000;
+  const out: GroupedRow[] = [];
+  let current: string | null = null;
+  for (const n of rows) {
+    const t = new Date(n.created_at).getTime();
+    const bucket = t >= startOfDay ? 'Today' : t >= weekAgo ? 'This week' : 'Earlier';
+    if (bucket !== current) {
+      current = bucket;
+      out.push({ header: bucket });
+    }
+    out.push(n);
+  }
+  return out;
 }
 
 function Row({ n, onPress }: { n: InboxNotification; onPress: () => void }) {
@@ -213,6 +242,7 @@ function Row({ n, onPress }: { n: InboxNotification; onPress: () => void }) {
 
 function leading(n: InboxNotification, theme: ReturnType<typeof useTheme>) {
   if (n.type === 'new_login') return <Badge icon="lock-closed" bg="#B3261E" />;
+  if (n.type === 'creator_digest') return <Badge icon="stats-chart" bg="#FF7A18" />;
   if (n.type === 'reach_milestone') return <Badge icon="rocket" bg="#2E7D46" />;
   if (n.type === 'moderation') return <Badge icon="shield-checkmark" bg={theme.textSecondary} />;
   if (n.actor_avatar_url)
@@ -294,6 +324,8 @@ function message(n: InboxNotification): string {
       return `invited you to their team as ${String(n.payload.role ?? 'a member')} — tap to respond`;
     case 'new_login':
       return `New login on a ${String(n.payload.platform ?? 'new')} device — tap if this wasn't you`;
+    case 'creator_digest':
+      return `Your week: ${Number(n.payload.views ?? 0).toLocaleString()} views${n.payload.like_pct != null ? `, ${n.payload.like_pct}% liked` : ''} — see your dashboard`;
     case 'partnership_update':
       return n.payload.revoked === true
         ? 'withdrew their name from your paid partnership'
@@ -316,6 +348,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   avatar: { width: 44, height: 44, borderRadius: 22 },
+  groupHeader: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
   avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1, gap: 2 },
   thumb: { width: 44, height: 44, borderRadius: 6, backgroundColor: '#111' },

@@ -24,7 +24,8 @@ export type NotificationType =
   | 'collab_invite'
   | 'collab_update'
   | 'team_invite'
-  | 'new_login';
+  | 'new_login'
+  | 'creator_digest';
 
 export type InboxNotification = {
   id: string;
