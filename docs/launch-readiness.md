@@ -78,3 +78,4 @@ Responsive pass done: below 800px the sidebar becomes a wrap-around top bar and 
 - Google Business Profile OAuth for venue claims still manual (API access pending).
 - Part 5 `award_message_activity` (DM reply points) still untested end-to-end on devices (needs two phones).
 - Sentry alert rules + PostHog funnel dashboards: console-side setup.
+- Apple ITMS-90725 (informational, on build 6): built with the iOS 26.5 SDK; from **April 2027** Apple requires the iOS 27 SDK (Xcode 27). Nothing to do now — eas.json uses the default build image, so this resolves itself with the next Expo SDK / EAS image upgrade, which must happen before April 2027 anyway.
