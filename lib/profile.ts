@@ -469,12 +469,8 @@ export async function setHideLikes(hide: boolean): Promise<void> {
 
 /** Read the caller's own hide_likes flag (for the settings toggle). */
 export async function getHideLikes(): Promise<boolean> {
-  const { data: u } = await supabase.auth.getUser();
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('hide_likes')
-    .eq('id', u.user!.id)
-    .single();
+  // Own-row read via get_my_profile (hide_likes is own-only post column-privacy).
+  const { data, error } = await supabase.rpc('get_my_profile');
   if (error) throw error;
   return Boolean((data as { hide_likes: boolean }).hide_likes);
 }

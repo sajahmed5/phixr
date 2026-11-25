@@ -378,6 +378,16 @@ export default function SettingsScreen() {
             label="Privacy Policy"
             onPress={() => router.push('/legal/privacy')}
           />
+          <LinkRow
+            icon="megaphone-outline"
+            label="Advertising policy"
+            onPress={() => router.push('/legal/ads')}
+          />
+          <LinkRow
+            icon="shield-checkmark-outline"
+            label="Online safety"
+            onPress={() => router.push('/legal/safety')}
+          />
         </Group>
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.version}>

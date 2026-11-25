@@ -38,6 +38,8 @@ export type AnalyticsEvent =
   | 'first_comment'
   | 'first_post'
   | 'first_share'
+  | 'first_boost'
+  | 'signup_completed'
   | 'session_start'
   | 'swipe'
   | 'undo_used'

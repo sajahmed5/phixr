@@ -163,6 +163,9 @@ export default function SignupIdentityScreen() {
         // Record the signup ads choice (best-effort; stays 'unset' → treated
         // as non-personalised if this fails, and Settings can set it later).
         await setAdsConsent(adsChoice ? 'personalised' : 'non_personalised').catch(() => {});
+        // Launch funnel (brief 10): account fully created on the resume path.
+        const { trackFirst } = await import('@/lib/analytics');
+        void trackFirst(session.user.id, 'signup_completed');
         reset();
         reload(); // auth context re-resolves the profile → routes to tabs
         return;

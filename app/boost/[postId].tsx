@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { buyBoost, getBoostProducts, iapAvailable, type BoostProduct } from '@/lib/iap';
 import {
   ADULT_BANDS,
   createBoost,
@@ -35,12 +36,22 @@ export default function BoostComposerScreen() {
   const [perDay, setPerDay] = useState(100);
   const [maxDays, setMaxDays] = useState(7);
   const [busy, setBusy] = useState(false);
+  // IAP (Part 10): money products, present only when the server flag is on
+  // AND the native module exists (never in Expo Go).
+  const [iapProducts, setIapProducts] = useState<BoostProduct[] | null>(null);
 
   useEffect(() => {
     void getClientSettings().then((s) => {
       setPerDay(settingNumber(s, 'boost_points_per_day', 100));
       setMaxDays(settingNumber(s, 'boost_max_days', 7));
     });
+    void (async () => {
+      try {
+        if (await iapAvailable()) setIapProducts(await getBoostProducts());
+      } catch {
+        setIapProducts(null);
+      }
+    })();
   }, []);
 
   const refreshEstimate = useCallback(async () => {
@@ -174,6 +185,36 @@ export default function BoostComposerScreen() {
             onPress={buy}
             disabled={!canAfford || busy}
           />
+          {(() => {
+            const product = iapProducts?.find((p) => p.days === days);
+            return product ? (
+              <Button
+                title={busy ? 'Starting…' : `Or pay ${product.displayPrice}`}
+                variant="secondary"
+                disabled={busy}
+                onPress={async () => {
+                  if (busy) return;
+                  setBusy(true);
+                  try {
+                    await buyBoost(postId, product.id, {
+                      age_bands: bands,
+                      region_label: null,
+                      tag_ids: [],
+                    });
+                    Alert.alert('Boost running', 'Your post will start appearing more often in the deck.');
+                    router.back();
+                  } catch (e) {
+                    Alert.alert(
+                      "Couldn't complete the purchase",
+                      e instanceof Error ? e.message : 'Please try again.',
+                    );
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              />
+            ) : null;
+          })()}
           <ThemedText type="small" themeColor="textSecondary">
             Cancel any time — unused whole days are refunded.
           </ThemedText>
