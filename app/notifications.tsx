@@ -2,13 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/use-theme';
+import { respondTeamInvite } from '@/lib/business';
 import { getNotifications, type InboxNotification } from '@/lib/notifications';
+import { supabase } from '@/lib/supabase';
 import { signMediaPaths } from '@/lib/media';
 import { useNotifications } from '@/lib/notifications-provider';
 import { formatRelative } from '@/lib/relative-time';
@@ -83,6 +85,31 @@ export default function NotificationsScreen() {
     if ((n.type === 'collab_invite' || n.type === 'collab_update') && n.post_id)
       return router.push(`/post/${n.post_id}`);
     if (n.type === 'partnership_update' && n.post_id) return router.push(`/post/${n.post_id}`);
+    if (n.type === 'team_invite') {
+      const handle = String(n.payload.business_handle ?? n.actor_handle ?? '');
+      const role = String(n.payload.role ?? 'team member');
+      const respond = async (accept: boolean) => {
+        try {
+          const { data, error } = await supabase.rpc('resolve_handle', { _handle: handle });
+          if (error || !data) throw error ?? new Error('not found');
+          await respondTeamInvite(data as string, accept);
+          Alert.alert(accept ? 'You joined the team' : 'Invite declined');
+          void load();
+        } catch {
+          Alert.alert("Couldn't respond", 'The invite may have been withdrawn.');
+        }
+      };
+      Alert.alert(
+        `Join @${handle}'s team?`,
+        `They've invited you as ${role === 'admin' ? 'an admin' : `a ${role}`}. You'd use your own login; what you do for them is recorded for the owner.`,
+        [
+          { text: 'Decline', style: 'destructive', onPress: () => void respond(false) },
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Accept', onPress: () => void respond(true) },
+        ],
+      );
+      return;
+    }
   }
 
   return (
@@ -227,6 +254,8 @@ function message(n: InboxNotification): string {
         : n.payload.accepted === true
           ? 'accepted your co-author invite'
           : 'declined your co-author invite';
+    case 'team_invite':
+      return `invited you to their team as ${String(n.payload.role ?? 'a member')} — tap to respond`;
     case 'partnership_update':
       return n.payload.revoked === true
         ? 'withdrew their name from your paid partnership'

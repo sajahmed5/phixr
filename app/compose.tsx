@@ -27,7 +27,13 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { listGroups, type AudienceGroup } from '@/lib/groups';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { mediaFromPipeline, saveDraft, scheduleDraft, type DraftPayload } from '@/lib/drafts';
+import {
+  myActingBusinesses,
+  saveBusinessDraft,
+  scheduleBusinessDraft,
+  type ActingBusiness,
+} from '@/lib/business';
+import { mediaFromPipeline, saveDraft, scheduleDraft, type DraftMedia, type DraftPayload } from '@/lib/drafts';
 import { looksPromotional } from '@/lib/partnerships';
 import { useUpload } from '@/lib/upload-manager';
 
@@ -49,6 +55,14 @@ export default function ComposeScreen() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [when, setWhen] = useState<Date>(() => new Date(Date.now() + 60 * 60 * 1000));
+  // Part 13A: editors/admins can compose FOR a business. The post goes
+  // through the business's drafts + scheduler and publishes server-side AS
+  // the business — direct posting is disabled while acting.
+  const [bizOptions, setBizOptions] = useState<ActingBusiness[]>([]);
+  const [actingBiz, setActingBiz] = useState<ActingBusiness | null>(null);
+  useEffect(() => {
+    void myActingBusinesses(['admin', 'editor']).then(setBizOptions).catch(() => {});
+  }, []);
 
   const buildPayload = useCallback((): DraftPayload | null => {
     const c = composition;
@@ -69,21 +83,44 @@ export default function ComposeScreen() {
   }, [composition]);
 
   // Autosave (12A): once media is processed, keep a rolling server-side slot
-  // so nothing is lost if the app closes. Debounced on edits.
+  // so nothing is lost if the app closes. Debounced on edits. Skipped while
+  // acting as a business (the draft belongs to the business, not to me).
   useEffect(() => {
     const payload = buildPayload();
-    if (!payload || composition?.posting || composition?.postedId) return;
+    if (!payload || actingBiz || composition?.posting || composition?.postedId) return;
     const t = setTimeout(() => {
       saveDraft('post', payload, { autosave: true }).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
-  }, [buildPayload, composition?.posting, composition?.postedId]);
+  }, [buildPayload, actingBiz, composition?.posting, composition?.postedId]);
+
+  const worstMediaStatus = (media: DraftMedia[]): string => {
+    const order = ['approved', 'pending', 'flagged', 'removed'];
+    let worst = 'approved';
+    for (const m of media) {
+      const s = m.moderation_status ?? 'approved';
+      if (order.indexOf(s) > order.indexOf(worst)) worst = s;
+    }
+    return worst;
+  };
 
   const onSaveDraft = async () => {
     const payload = buildPayload();
     if (!payload || savingDraft) return;
     setSavingDraft(true);
     try {
+      if (actingBiz) {
+        await saveBusinessDraft(
+          actingBiz.business_id,
+          payload as unknown as Record<string, unknown>,
+          worstMediaStatus(payload.media),
+        );
+        clear();
+        const { Alert } = await import('react-native');
+        Alert.alert('Saved', `Saved to @${actingBiz.profiles?.handle ?? 'the business'}'s drafts.`);
+        router.back();
+        return;
+      }
       await saveDraft('post', payload, draftId ? { id: draftId } : {});
       clear();
       router.replace('/drafts');
@@ -97,6 +134,22 @@ export default function ComposeScreen() {
     if (!payload) return;
     setSavingDraft(true);
     try {
+      if (actingBiz) {
+        const id = await saveBusinessDraft(
+          actingBiz.business_id,
+          payload as unknown as Record<string, unknown>,
+          worstMediaStatus(payload.media),
+        );
+        await scheduleBusinessDraft(actingBiz.business_id, id, date);
+        clear();
+        const { Alert } = await import('react-native');
+        Alert.alert(
+          'Scheduled',
+          `Publishes as @${actingBiz.profiles?.handle ?? 'the business'} — it's in their schedule.`,
+        );
+        router.back();
+        return;
+      }
       const id = draftId ?? (await saveDraft('post', payload, {}));
       setDraftId(id);
       await saveDraft('post', payload, { id });
@@ -432,12 +485,42 @@ export default function ComposeScreen() {
               backgroundColor: theme.background,
             },
           ]}>
-          <Button
-            title={phase === 'uploading' ? 'Post when ready' : 'Post'}
-            onPress={onPost}
-            disabled={!canPost}
-            loading={composition.posting}
-          />
+          {bizOptions.length > 0 ? (
+            <View style={styles.postAsRow}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Post as
+              </ThemedText>
+              {[null, ...bizOptions].map((b) => {
+                const on = (b?.business_id ?? null) === (actingBiz?.business_id ?? null);
+                return (
+                  <Pressable
+                    key={b?.business_id ?? 'me'}
+                    accessibilityRole="button"
+                    onPress={() => setActingBiz(b)}
+                    style={[
+                      styles.postAsChip,
+                      { borderColor: on ? BRAND.accent : theme.border },
+                    ]}>
+                    <ThemedText type="small">
+                      {b ? `@${b.profiles?.handle ?? 'business'}` : 'Me'}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+          {actingBiz ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+              Business posts publish through their schedule — save a draft or schedule below.
+            </ThemedText>
+          ) : (
+            <Button
+              title={phase === 'uploading' ? 'Post when ready' : 'Post'}
+              onPress={onPost}
+              disabled={!canPost}
+              loading={composition.posting}
+            />
+          )}
           <View style={styles.draftRow}>
             <Button
               title="Save draft"
@@ -591,6 +674,8 @@ function VideoPreview({ uri }: { uri: string }) {
 
 const styles = StyleSheet.create({
   draftRow: { flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 8 },
+  postAsRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  postAsChip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
   fill: { flex: 1 },
   content: { padding: 16, gap: 18 },
   previewWrap: { borderRadius: 16, overflow: 'hidden' },

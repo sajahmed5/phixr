@@ -22,7 +22,8 @@ export type NotificationType =
   | 'partnership_update'
   | 'schedule_update'
   | 'collab_invite'
-  | 'collab_update';
+  | 'collab_update'
+  | 'team_invite';
 
 export type InboxNotification = {
   id: string;
