@@ -36,6 +36,9 @@ export type Draft = {
   /** Human-readable place, for the compose UI only (never stored). */
   locationLabel: string | null;
   tags: { name: string; source: 'user' | 'vision' | 'geo' }[];
+  /** Paid-partnership brand handle (Part 9A). Declared right after the post
+   *  lands; the label is then permanent for the post's lifetime. */
+  partnerBrand: string | null;
 };
 
 type PipelinePhase = 'uploading' | 'ready' | 'rejected' | 'failed';
@@ -111,6 +114,21 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
         tags: c.draft.tags,
         overlays: c.overlays,
       });
+      // Paid partnership (Part 9A): declare straight after the post lands so
+      // the ASA disclosure label is live from the start. The post itself has
+      // succeeded — a declare failure is surfaced, not fatal.
+      if (c.draft.partnerBrand?.trim()) {
+        try {
+          const { declarePartnership } = await import('@/lib/partnerships');
+          await declarePartnership(id, c.draft.partnerBrand.trim());
+        } catch (e) {
+          const { Alert } = await import('react-native');
+          Alert.alert(
+            'Partnership label failed',
+            e instanceof Error ? e.message : 'Could not add the paid-partnership label.',
+          );
+        }
+      }
       if (user?.id) void trackFirst(user.id, 'first_post'); // milestone only, no post id/media
       void dismissCameraCoach(); // first post made → the camera nudge is no longer needed
       set((x) => ({ ...x, posting: false, postedId: id }));
@@ -203,6 +221,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
           locationCell: null,
           locationLabel: null,
           tags: [],
+          partnerBrand: null,
         },
         submitRequested: false,
         posting: false,

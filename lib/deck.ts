@@ -32,6 +32,9 @@ export type DeckCard = {
   is_boosted?: boolean;
   /** Sensitive-but-allowed (Part 6B): cover until tapped. Never sent to minors. */
   sensitive?: boolean;
+  /** Part 9A: ASA disclosure — "Paid partnership" (with the brand's handle
+   *  once the brand approves). Attached client-side per batch. */
+  partner_label?: string;
   /** Part 8: this card is an ad — always labelled, swipeable like any post. */
   is_ad?: boolean;
   ad_id?: string | null;

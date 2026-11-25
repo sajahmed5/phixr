@@ -74,4 +74,7 @@ export type SignupIdentityMetadata = {
   date_of_birth: string; // ISO `YYYY-MM-DD`
   terms_version: string;
   terms_accepted_at: string; // ISO timestamp
+  /** Ads personalisation chosen at signup (adults only; minors always false).
+   *  Applied via set_ads_consent when the profile row is created. */
+  ads_personalised?: boolean;
 };

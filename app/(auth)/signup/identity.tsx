@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { setAdsConsent } from '@/lib/ads';
 import { track } from '@/lib/analytics';
 import { DateOfBirthField } from '@/components/date-of-birth-field';
 import { ThemedText } from '@/components/themed-text';
@@ -110,6 +111,12 @@ export default function SignupIdentityScreen() {
           : null;
 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  // Ads personalisation (brief 8D, moved to signup): its own switch beside the
+  // T&C tick — never bundled into it — shown to adults only, on by default,
+  // changeable any time in Settings. Minors are always non-personalised (the
+  // server refuses anything else).
+  const [adsPersonalised, setAdsPersonalised] = useState(true);
+  const adsChoice = dobState === 'adult' && adsPersonalised;
 
   const canSubmit =
     !validateDisplayName(displayName) &&
@@ -153,6 +160,9 @@ export default function SignupIdentityScreen() {
           else setFormError(error.message);
           return;
         }
+        // Record the signup ads choice (best-effort; stays 'unset' → treated
+        // as non-personalised if this fails, and Settings can set it later).
+        await setAdsConsent(adsChoice ? 'personalised' : 'non_personalised').catch(() => {});
         reset();
         reload(); // auth context re-resolves the profile → routes to tabs
         return;
@@ -172,6 +182,7 @@ export default function SignupIdentityScreen() {
             date_of_birth: isoDob,
             terms_version: TERMS_VERSION,
             terms_accepted_at: new Date().toISOString(),
+            ads_personalised: adsChoice,
           } satisfies SignupIdentityMetadata,
         },
       });
@@ -301,6 +312,27 @@ export default function SignupIdentityScreen() {
           .
         </ThemedText>
       </Pressable>
+
+      {/* Ads personalisation (8D): a separate switch, never part of the T&C
+          tick. Adults only — minors are always non-personalised. */}
+      {dobState === 'adult' ? (
+        <Pressable
+          style={styles.termsRow}
+          onPress={() => setAdsPersonalised((v) => !v)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: adsPersonalised }}>
+          <Ionicons
+            name={adsPersonalised ? 'checkbox' : 'square-outline'}
+            size={24}
+            color={adsPersonalised ? BRAND.accent : theme.textSecondary}
+          />
+          <ThemedText type="small" style={styles.termsText}>
+            Personalise the ads I see using my age group, area and interests. You
+            see the same number of ads either way — change this any time in
+            Settings.
+          </ThemedText>
+        </Pressable>
+      ) : null}
     </AuthScreen>
   );
 }

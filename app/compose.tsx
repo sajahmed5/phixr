@@ -26,6 +26,7 @@ import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { listGroups, type AudienceGroup } from '@/lib/groups';
+import { looksPromotional } from '@/lib/partnerships';
 import { useUpload } from '@/lib/upload-manager';
 
 const CAPTION_MAX = 2200;
@@ -39,6 +40,23 @@ export default function ComposeScreen() {
   const { user, profile } = useAuth();
   const [groups, setGroups] = useState<AudienceGroup[] | null>(null);
   const [defaultApplied, setDefaultApplied] = useState(false);
+  const [promoNudge, setPromoNudge] = useState(false);
+
+  // Promotional-post prompt (brief 9C): nudge when the caption carries promo
+  // wording or @mentions a business account. Debounced; best-effort.
+  const captionText = composition?.draft.caption ?? '';
+  useEffect(() => {
+    if (!captionText.trim() || profile?.age_band === 'minor') {
+      setPromoNudge(false);
+      return;
+    }
+    const t = setTimeout(() => {
+      void looksPromotional(captionText)
+        .then(setPromoNudge)
+        .catch(() => setPromoNudge(false));
+    }, 600);
+    return () => clearTimeout(t);
+  }, [captionText, profile?.age_band]);
 
   // If there's no active composition (e.g. deep-linked), bounce back.
   useEffect(() => {
@@ -308,6 +326,32 @@ export default function ComposeScreen() {
             selected={draft.tags}
             onChange={(tags) => updateDraft({ tags })}
           />
+
+          {/* Paid partnership (brief 9A/9C) — adults only; the label is permanent
+              once posted (ASA disclosure), and the brand approves being named. */}
+          {profile?.age_band !== 'minor' ? (
+            <View>
+              <ThemedText type="smallBold">Paid partnership</ThemedText>
+              {promoNudge && !draft.partnerBrand ? (
+                <FormMessage tone="error">
+                  This looks promotional. If a brand paid you or gifted this, UK
+                  advertising rules say it must be labelled — add the brand below.
+                </FormMessage>
+              ) : null}
+              <TextField
+                label=""
+                placeholder="@brand — leave empty if this isn't paid"
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={draft.partnerBrand ?? ''}
+                onChangeText={(t) => updateDraft({ partnerBrand: t || null })}
+              />
+              <ThemedText type="small" themeColor="textSecondary">
+                Adds a permanent “Paid partnership” label to this post. The brand
+                (a Phixr business account) is asked to approve being named.
+              </ThemedText>
+            </View>
+          ) : null}
         </ScrollView>
 
         {/* Post bar */}

@@ -327,6 +327,20 @@ export default function SettingsScreen() {
             label="Business account"
             onPress={() => router.push('/settings/business')}
           />
+          {(profile as { account_type?: string } | null)?.account_type === 'business' ? (
+            <LinkRow
+              icon="ribbon-outline"
+              label="Partnership requests"
+              onPress={() => router.push('/settings/partnerships')}
+            />
+          ) : null}
+          {profile?.age_band !== 'minor' ? (
+            <LinkRow
+              icon="cash-outline"
+              label="Earnings"
+              onPress={() => router.push('/settings/earnings')}
+            />
+          ) : null}
           <LinkRow
             icon="key-outline"
             label="Change password"

@@ -160,6 +160,15 @@ export const SwipeCard = memo(function SwipeCard({
             </ThemedText>
           </View>
         ) : null}
+        {/* ASA disclosure (brief 9A): obvious, and the creator can't remove it. */}
+        {card.partner_label ? (
+          <View style={styles.boostedChip} pointerEvents="none">
+            <Ionicons name="briefcase-outline" size={12} color="#fff" />
+            <ThemedText type="small" style={styles.boostedText}>
+              {card.partner_label}
+            </ThemedText>
+          </View>
+        ) : null}
         <Pressable
           onPress={isActive && onOpenProfile ? () => onOpenProfile(card.poster_handle) : undefined}
           disabled={!isActive || !onOpenProfile}

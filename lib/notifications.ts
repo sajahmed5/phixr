@@ -16,7 +16,10 @@ export type NotificationType =
   | 'moderation'
   | 'message'
   | 'mention'
-  | 'like';
+  | 'like'
+  | 'report_update'
+  | 'partnership_request'
+  | 'partnership_update';
 
 export type InboxNotification = {
   id: string;
