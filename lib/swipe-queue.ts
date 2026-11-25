@@ -82,6 +82,13 @@ export class SwipeQueue {
     void this.process();
   }
 
+  /** Part 11: awaitable drain for account switching — every queued swipe must
+   *  land under ITS OWN account before the session changes. */
+  async drain(): Promise<void> {
+    while (this.looping) await new Promise((r) => setTimeout(r, 50));
+    await this.process();
+  }
+
   private nextId(): string {
     this.seq += 1;
     return `${Date.now()}-${this.seq}`;

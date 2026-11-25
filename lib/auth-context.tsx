@@ -10,7 +10,19 @@ import {
   type ReactNode,
 } from 'react';
 
-import { unregisterPushToken } from '@/lib/notifications';
+import {
+  drainBeforeSwitch,
+  getAccountTokens,
+  listAccounts,
+  removeAccount,
+  clearVault,
+  saveAccountSlot,
+  setAccountUnread,
+  updateSlotTokens,
+} from '@/lib/accounts';
+import { recordDevicePresence } from '@/lib/device-id';
+import { registerPushToken, unregisterPushToken } from '@/lib/notifications';
+import { resetSettingsCache } from '@/lib/settings';
 import { supabase } from '@/lib/supabase';
 import { ageBandFromDob } from '@/lib/validation';
 import type { Profile, SignupIdentityMetadata } from '@/types';
@@ -47,6 +59,9 @@ interface AuthContextValue {
   profile: Profile | null;
   signIn: (email: string, password: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
+  /** Part 11: switch to another signed-in account (throws if its slot is stale). */
+  switchAccount: (userId: string) => Promise<void>;
+  signOutAll: () => Promise<void>;
   resendVerification: (email: string) => Promise<AuthResult>;
   sendPasswordReset: (email: string, redirectTo?: string) => Promise<AuthResult>;
   /** Force a re-fetch of the profile (e.g. after creating one in resume mode). */
@@ -129,8 +144,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(data.session);
       setSessionLoading(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
+      // Part 11: the vault slot must always hold the LATEST token pair, or a
+      // later switch-back would present a consumed refresh token.
+      if (event === 'TOKEN_REFRESHED' && nextSession) void updateSlotTokens(nextSession);
     });
     return () => {
       active = false;
@@ -167,6 +185,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(result.kind === 'have' ? result.profile : null);
       // Mark this user's profile as definitively resolved (found or absent).
       setResolvedUserId(session.user.id);
+      if (result.kind === 'have') {
+        // Part 11: vault this account (device-local only) + the moderator-only
+        // device-presence signal. Both best-effort.
+        const pr = result.profile as { handle: string; display_name: string; avatar_url: string | null; age_band: string };
+        void saveAccountSlot(session, {
+          handle: pr.handle,
+          display_name: pr.display_name,
+          avatar_url: pr.avatar_url,
+          age_band: pr.age_band,
+        }).catch(() => {});
+        void recordDevicePresence();
+      }
     })();
 
     return () => {
@@ -181,9 +211,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   }, []);
 
+  /** Part 11: switch to another vaulted account without signing anything out. */
+  const switchAccount = useCallback(async (targetUserId: string): Promise<void> => {
+    const current = (await supabase.auth.getSession()).data.session;
+    if (current?.user.id === targetUserId) return;
+    const tokens = await getAccountTokens(targetUserId);
+    if (!tokens) {
+      await removeAccount(targetUserId);
+      throw new Error('That account needs signing in again.');
+    }
+    // Drain per-account queues BEFORE the session changes — nothing queued
+    // under one account may ever be written as another.
+    await drainBeforeSwitch();
+    // Snapshot the outgoing account's unread count for its switcher badge.
+    if (current) {
+      const { data: unread } = await supabase.rpc('unread_notification_count');
+      if (typeof unread === 'number') await setAccountUnread(current.user.id, unread).catch(() => {});
+      await updateSlotTokens(current).catch(() => {});
+    }
+    const { data, error } = await supabase.auth.setSession(tokens);
+    if (error || !data.session) {
+      // Stale/consumed refresh token: the slot is dead — needs a fresh sign-in.
+      await removeAccount(targetUserId);
+      throw new Error('That account needs signing in again.');
+    }
+    // Per-account module caches must not survive the switch.
+    resetSettingsCache();
+    await updateSlotTokens(data.session).catch(() => {});
+    // This device now also receives the new account's pushes.
+    void registerPushToken().catch(() => {});
+    void recordDevicePresence();
+    setReloadNonce((n) => n + 1);
+  }, []);
+
   const signOut = useCallback(async () => {
     // Drop this device's push token first (needs the session to satisfy RLS).
     await unregisterPushToken().catch(() => {});
+    const current = (await supabase.auth.getSession()).data.session;
+    if (current) await removeAccount(current.user.id).catch(() => {});
+    // Part 11: with other accounts still vaulted, signing out of one switches
+    // to the most recent other account instead of landing on the login screen.
+    const rest = await listAccounts();
+    const next = rest[0] ? await getAccountTokens(rest[0].user_id) : null;
+    if (next) {
+      await drainBeforeSwitch();
+      const { data, error } = await supabase.auth.setSession(next);
+      if (!error && data.session) {
+        resetSettingsCache();
+        void registerPushToken().catch(() => {});
+        setReloadNonce((n) => n + 1);
+        return;
+      }
+      await removeAccount(rest[0].user_id).catch(() => {});
+    }
+    await supabase.auth.signOut();
+    setProfile(null);
+  }, []);
+
+  /** Part 11: sign out of every vaulted account (each drops its push rows). */
+  const signOutAll = useCallback(async () => {
+    await unregisterPushToken().catch(() => {});
+    const current = (await supabase.auth.getSession()).data.session;
+    for (const a of await listAccounts()) {
+      if (a.user_id === current?.user.id) continue;
+      const tokens = await getAccountTokens(a.user_id);
+      if (!tokens) continue;
+      const { data, error } = await supabase.auth.setSession(tokens);
+      if (!error && data.session) await unregisterPushToken().catch(() => {});
+    }
+    await clearVault().catch(() => {});
     await supabase.auth.signOut();
     setProfile(null);
   }, []);
@@ -229,11 +325,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       signIn,
       signOut,
+      switchAccount,
+      signOutAll,
       resendVerification,
       sendPasswordReset,
       reload,
     }),
-    [status, session, emailVerified, profile, signIn, signOut, resendVerification, sendPasswordReset, reload],
+    [status, session, emailVerified, profile, signIn, signOut, switchAccount, signOutAll, resendVerification, sendPasswordReset, reload],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

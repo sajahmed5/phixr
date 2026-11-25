@@ -73,6 +73,23 @@ Deno.serve(withSentry('send-push', async (req) => {
   const { data: tokens } = await svc.from('push_tokens').select('token').eq('user_id', notif.user_id);
   if (!tokens?.length) return json({ skipped: 'no_tokens' });
 
+  // Part 11 (multi-account): which of this user's device tokens are shared
+  // with OTHER signed-in accounts? Those pushes get an "@handle:" prefix so
+  // the user can tell which account it's for, and the payload carries the
+  // account id so a tap switches account first.
+  const tokenList = tokens.map((t) => t.token);
+  const { data: shared } = await svc
+    .from('push_tokens')
+    .select('token, user_id')
+    .in('token', tokenList);
+  const sharedTokens = new Set(
+    (shared ?? [])
+      .filter((r) => r.user_id !== notif.user_id)
+      .map((r) => r.token),
+  );
+  const { data: me } = await svc.from('profiles').select('handle').eq('id', notif.user_id).maybeSingle();
+  const myHandle = me?.handle ?? '';
+
   const { count: badge } = await svc
     .from('notifications')
     .select('*', { count: 'exact', head: true })
@@ -89,11 +106,18 @@ Deno.serve(withSentry('send-push', async (req) => {
 
   const messages = tokens.map((t) => ({
     to: t.token,
-    title,
+    // Shared device → say which account this is for ("@saj_creates: …").
+    title: sharedTokens.has(t.token) && myHandle ? `@${myHandle}: ${title}` : title,
     body,
     sound: 'default',
     badge: typeof badge === 'number' ? badge : undefined,
-    data: { type: notif.type, post_id: notif.post_id, comment_id: notif.comment_id, actor, notification_id: notif.id, conversation_id: notif.payload?.conversation_id ?? null },
+    data: {
+      type: notif.type, post_id: notif.post_id, comment_id: notif.comment_id, actor,
+      notification_id: notif.id, conversation_id: notif.payload?.conversation_id ?? null,
+      // Part 11: the account this push belongs to — the tap handler switches
+      // to it before navigating.
+      account_user_id: notif.user_id,
+    },
   }));
 
   // ---- send via Expo, then reap revoked tokens ----

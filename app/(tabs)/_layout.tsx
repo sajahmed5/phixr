@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { useState } from 'react';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,6 +13,7 @@ import { BRAND, TAB_BAR } from '@/constants/config';
 import { TAB_BAR_FILL } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
+import { AccountSwitcher } from '@/components/account-switcher';
 import { useInboxBadge, useInboxBadgeUpdater } from '@/lib/inbox-badge';
 import { useNotifications } from '@/lib/notifications-provider';
 
@@ -24,8 +26,11 @@ export default function TabsLayout() {
   // #28: notifications live under Profile (the bell is in its header), so the tab
   // mirrors the bell's actionable-only count.
   const { unread } = useNotifications();
+  // Part 11: long-press the profile tab for the account switcher.
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
   return (
+    <>
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: BRAND.accent,
@@ -122,6 +127,7 @@ export default function TabsLayout() {
       {/* 5. Profile — own profile */}
       <Tabs.Screen
         name="profile"
+        listeners={{ tabLongPress: () => setSwitcherOpen(true) }}
         options={{
           title: 'Profile',
           tabBarBadge: unread > 0 ? (unread > 9 ? '9+' : unread) : undefined,
@@ -134,5 +140,7 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+      <AccountSwitcher visible={switcherOpen} onClose={() => setSwitcherOpen(false)} />
+    </>
   );
 }

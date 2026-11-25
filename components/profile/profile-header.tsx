@@ -14,6 +14,8 @@ type Props = {
   /** Points balance to feature as the hero stat (own profile). Omit to keep the classic layout. */
   points?: number | null;
   onPressPoints?: () => void;
+  /** Part 11: set on the own-profile tab — tapping the name opens the switcher. */
+  onPressIdentity?: () => void;
   /** Action row (settings gear / follow button / overflow), rendered top-right + below. */
   action?: React.ReactNode;
 };
@@ -24,6 +26,7 @@ export function ProfileHeader({
   onPressFollowing,
   points,
   onPressPoints,
+  onPressIdentity,
   action,
 }: Props) {
   const showPointsHero = points != null;
@@ -57,7 +60,18 @@ export function ProfileHeader({
       </View>
 
       <View style={styles.identity}>
-        <ThemedText type="subtitle">{profile.display_name}</ThemedText>
+        {/* Part 11: on your OWN profile the name opens the account switcher. */}
+        <Pressable
+          onPress={onPressIdentity}
+          disabled={!onPressIdentity}
+          accessibilityRole={onPressIdentity ? 'button' : undefined}
+          accessibilityLabel={onPressIdentity ? 'Switch account' : undefined}
+          style={styles.identityRow}>
+          <ThemedText type="subtitle">{profile.display_name}</ThemedText>
+          {onPressIdentity ? (
+            <Ionicons name="chevron-down" size={16} color={BRAND.accent} />
+          ) : null}
+        </Pressable>
         <ThemedText type="small" themeColor="textSecondary">
           @{profile.handle}
           {profile.is_private ? '  ·  Private' : ''}
@@ -125,6 +139,7 @@ const styles = StyleSheet.create({
   stat: { alignItems: 'center', gap: 2 },
   pointsHero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
   pointsValue: { fontSize: 40, lineHeight: 44 },
+  identityRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   identity: { gap: 3 },
   inlineStats: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 2 },
   bio: { marginTop: 4 },

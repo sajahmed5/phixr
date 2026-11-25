@@ -5,6 +5,7 @@ import { track, trackFirst } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth-context';
 import { haptics } from '@/lib/haptics';
 import { DECK_BATCH_SIZE, type DeckCard, type FetchBatch, type SwipeDirection } from '@/lib/deck';
+import { registerSwitchFlusher } from '@/lib/accounts';
 import { resolveDeckMedia } from '@/lib/media';
 import { attachPartnershipLabels } from '@/lib/partnerships';
 import { SwipeQueue } from '@/lib/swipe-queue';
@@ -134,9 +135,14 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
     const viewQueue = new ViewEventQueue(uid);
     viewQueueRef.current = viewQueue;
     void viewQueue.init();
+    // Part 11: before an account switch, both queues drain under THIS account.
+    const unregisterFlusher = registerSwitchFlusher(async () => {
+      await Promise.all([queue.drain(), viewQueue.drain()]);
+    });
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadInitial();
     return () => {
+      unregisterFlusher();
       queue.dispose();
       queueRef.current = null;
       // Closes the in-progress view as 'none' and flushes the buffer.

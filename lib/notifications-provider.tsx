@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { setAccountUnread } from '@/lib/accounts';
 import { useAuth } from '@/lib/auth-context';
 import {
   getUnreadCount,
@@ -64,15 +65,17 @@ function route(
 }
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
-  const { status } = useAuth();
+  const { status, user, switchAccount } = useAuth();
   const [unread, setUnread] = useState(0);
-  const registered = useRef(false);
+  const registered = useRef<string | null>(null);
 
   const refreshUnread = useCallback(async () => {
     const n = await getUnreadCount();
     setUnread(n);
     if (NATIVE) await Notifications.setBadgeCountAsync(n).catch(() => {});
-  }, []);
+    // Part 11: mirror into the account vault for the switcher badge.
+    if (user?.id) void setAccountUnread(user.id, n).catch(() => {});
+  }, [user?.id]);
 
   const clearAll = useCallback(async () => {
     await markRead();
@@ -82,13 +85,15 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   // Register the push token AFTER onboarding — status 'ready' means verified +
   // profile + onboarding complete. Runs once per session.
   useEffect(() => {
-    if (status === 'ready' && !registered.current) {
-      registered.current = true;
+    // Part 11: `registered` is per-ACCOUNT — a switch re-registers so the
+    // device token row exists for every signed-in account.
+    if (status === 'ready' && registered.current !== user?.id) {
+      registered.current = user?.id ?? null;
       void registerPushToken();
       void refreshUnread();
     }
     if (status === 'signedOut') {
-      registered.current = false;
+      registered.current = null;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reset badge on sign-out
       setUnread(0);
     }
@@ -104,11 +109,22 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   // Taps on a notification → deep link. Also handle a cold start from a tap.
   useEffect(() => {
     if (!NATIVE) return;
+    const open = (data: Record<string, unknown>) => {
+      // Part 11: a push for another signed-in account switches to it first.
+      const forAccount = data?.account_user_id as string | undefined;
+      if (forAccount && user?.id && forAccount !== user.id) {
+        switchAccount(forAccount)
+          .then(() => route(data as never))
+          .catch(() => route(data as never));
+        return;
+      }
+      route(data as never);
+    };
     const sub = Notifications.addNotificationResponseReceivedListener((resp) => {
-      route(resp.notification.request.content.data as never);
+      open(resp.notification.request.content.data as Record<string, unknown>);
     });
     Notifications.getLastNotificationResponseAsync().then((resp) => {
-      if (resp) route(resp.notification.request.content.data as never);
+      if (resp) open(resp.notification.request.content.data as Record<string, unknown>);
     });
     return () => sub.remove();
   }, []);

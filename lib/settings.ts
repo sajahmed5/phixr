@@ -21,6 +21,13 @@ const TTL_MS = 5 * 60 * 1000;
 let cache: { value: ClientSettings; fetchedAt: number } | null = null;
 let inFlight: Promise<ClientSettings> | null = null;
 
+/** Part 11: drop the cache on account switch so the next read is for the
+ *  new account (per-user overrides differ). */
+export function resetSettingsCache(): void {
+  cache = null;
+  inFlight = null;
+}
+
 export async function getClientSettings(): Promise<ClientSettings> {
   if (cache && Date.now() - cache.fetchedAt < TTL_MS) return cache.value;
   if (inFlight) return inFlight;

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AccountSwitcher } from '@/components/account-switcher';
 import { ProfileHeader } from '@/components/profile/profile-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -42,6 +43,7 @@ export default function ProfileScreen() {
   const handle = authProfile?.handle;
 
   const [overview, setOverview] = useState<ProfileOverview | null>(null);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('posts');
   const [posts, setPosts] = useState<GridPost[] | null>(null);
   const [liked, setLiked] = useState<SwipedPost[] | null>(null);
@@ -176,6 +178,7 @@ export default function ProfileScreen() {
         profile={overview}
         points={authProfile?.points_balance ?? 0}
         onPressPoints={() => router.push('/points')}
+        onPressIdentity={() => setSwitcherOpen(true)}
         onPressFollowers={() => goConnections('followers')}
         onPressFollowing={() => goConnections('following')}
         action={
@@ -259,6 +262,7 @@ export default function ProfileScreen() {
           </Pressable>
         )}
       />
+      <AccountSwitcher visible={switcherOpen} onClose={() => setSwitcherOpen(false)} />
     </ThemedView>
   );
 }
