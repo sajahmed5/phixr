@@ -32,6 +32,9 @@ import {
   getRecentSearches,
   getSearchSettings,
   resetSearchCenter,
+  getSponsoredResults,
+  recordSponsoredClick,
+  SEARCH_CATEGORIES,
   searchAccounts,
   searchPosts,
   searchTags,
@@ -43,11 +46,14 @@ import {
   type AccountHit,
   type GeoPlace,
   type RecentSearch,
+  type SearchCategory,
   type SearchMode,
   type SearchPost,
+  type SponsoredResult,
   type SearchSettings,
   type TagHit,
 } from '@/lib/search';
+import { LocalMap } from '@/components/search/local-map';
 
 const MODES: { key: SearchMode; label: string }[] = [
   { key: 'worldwide', label: 'Worldwide' },
@@ -77,6 +83,10 @@ export default function SearchScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState(false);
   const [relocating, setRelocating] = useState(false);
+  // Part 7: category filter chips, Grid/Map toggle, sponsored strip (Local).
+  const [category, setCategory] = useState<SearchCategory>(null);
+  const [localView, setLocalView] = useState<'grid' | 'map'>('grid');
+  const [sponsored, setSponsored] = useState<SponsoredResult[]>([]);
 
   const runId = useRef(0); // guards against out-of-order (cancels stale responses)
   const offset = useRef(0);
@@ -160,13 +170,15 @@ export default function SearchScreen() {
         setAccounts(rows);
         setHasMore(rows.length === ACCOUNTS_PAGE);
       } else {
-        const [rows, rel] = await Promise.all([
-          searchPosts(mode, q, 0),
+        const [rows, rel, sp] = await Promise.all([
+          searchPosts(mode, q, 0, PAGE, category),
           mode === 'worldwide' ? searchAccounts(q, 0, 4) : Promise.resolve([] as AccountHit[]),
+          mode === 'local' ? getSponsoredResults(q) : Promise.resolve([] as SponsoredResult[]),
         ]);
         if (id !== runId.current) return;
         setPosts(rows);
         setRelated(rel);
+        setSponsored(sp);
         setHasMore(rows.length === PAGE);
       }
     } catch {
@@ -174,7 +186,7 @@ export default function SearchScreen() {
     } finally {
       if (id === runId.current) setLoading(false);
     }
-  }, [mode, q, empty]);
+  }, [mode, q, empty, category]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- data-loader; runSearch sets loading/results internally
@@ -193,7 +205,7 @@ export default function SearchScreen() {
         setAccounts((prev) => [...prev, ...rows]);
         setHasMore(rows.length === ACCOUNTS_PAGE);
       } else {
-        const rows = await searchPosts(mode, q, offset.current);
+        const rows = await searchPosts(mode, q, offset.current, PAGE, category);
         if (id !== runId.current) return;
         setPosts((prev) => [...prev, ...rows]);
         setHasMore(rows.length === PAGE);
@@ -203,7 +215,7 @@ export default function SearchScreen() {
     } finally {
       if (id === runId.current) setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, empty, mode, q]);
+  }, [loadingMore, hasMore, empty, mode, q, category]);
 
   const remember = useCallback(() => {
     if (q.length >= 2) {
@@ -291,6 +303,76 @@ export default function SearchScreen() {
         />
       ) : null}
 
+      {/* Part 7A/7B: category chips + Grid/Map toggle (Local). */}
+      {mode === 'local' || mode === 'worldwide' ? (
+        <View style={styles.filterRow}>
+          {SEARCH_CATEGORIES.map((c) => {
+            const on = category === c.key;
+            return (
+              <Pressable
+                key={c.key}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                onPress={() => setCategory(on ? null : c.key)}
+                style={[
+                  styles.filterChip,
+                  { borderColor: theme.border },
+                  on && { backgroundColor: theme.tint, borderColor: theme.tint },
+                ]}>
+                <ThemedText type="small" style={{ color: on ? '#fff' : theme.textSecondary, fontWeight: '600' }}>
+                  {c.label}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+          {mode === 'local' ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={localView === 'grid' ? 'Show map' : 'Show grid'}
+              onPress={() => setLocalView((v) => (v === 'grid' ? 'map' : 'grid'))}
+              style={[styles.filterChip, styles.mapToggle, { borderColor: theme.border }]}>
+              <Ionicons name={localView === 'grid' ? 'map-outline' : 'grid-outline'} size={14} color={theme.textSecondary} />
+              <ThemedText type="small" style={{ color: theme.textSecondary, fontWeight: '600' }}>
+                {localView === 'grid' ? 'Map' : 'Grid'}
+              </ThemedText>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Part 7D: sponsored placements — always labelled, always real distance. */}
+      {mode === 'local' && localView === 'grid' && !empty && sponsored.length > 0 ? (
+        <View style={styles.sponsoredWrap}>
+          {sponsored.map((sp) => (
+            <Pressable
+              key={sp.id}
+              onPress={() => {
+                recordSponsoredClick(sp.id);
+                router.push({ pathname: '/u/[handle]', params: { handle: sp.business_handle } });
+              }}
+              style={[styles.sponsoredRow, { borderColor: theme.border }]}>
+              <View style={styles.sponsoredInfo}>
+                <ThemedText type="smallBold" numberOfLines={1}>
+                  {sp.venue_name}
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {sp.distance_m < 1609
+                    ? `${Math.max(1, Math.round(sp.distance_m / 80))} min walk`
+                    : `${(sp.distance_m / 1609.34).toFixed(1)} miles`}
+                  {' · @'}
+                  {sp.business_handle}
+                </ThemedText>
+              </View>
+              <View style={[styles.sponsoredBadge, { borderColor: theme.border }]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Sponsored
+                </ThemedText>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
       {/* Body */}
       {showRecents ? (
         <RecentList
@@ -340,6 +422,8 @@ export default function SearchScreen() {
             router.push({ pathname: '/tag/[name]', params: { name } });
           }}
         />
+      ) : mode === 'local' && localView === 'map' ? (
+        <LocalMap />
       ) : (
         <PostsGrid
           data={posts}
@@ -911,6 +995,20 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, fontSize: 15, paddingVertical: 0 },
   toggles: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, marginBottom: 8 },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingBottom: 8, alignItems: 'center' },
+  filterChip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
+  mapToggle: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
+  sponsoredWrap: { paddingHorizontal: 16, paddingBottom: 6, gap: 6 },
+  sponsoredRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    padding: 10,
+  },
+  sponsoredInfo: { flex: 1, gap: 1 },
+  sponsoredBadge: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   toggle: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24 },
   sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6 },

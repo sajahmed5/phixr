@@ -304,6 +304,11 @@ export default function SettingsScreen() {
 
         <Group title="Account">
           <LinkRow
+            icon="briefcase-outline"
+            label="Business account"
+            onPress={() => router.push('/settings/business')}
+          />
+          <LinkRow
             icon="key-outline"
             label="Change password"
             onPress={() => router.push('/settings/password')}
