@@ -82,6 +82,7 @@ export type PostDetail = {
   media_url: string; // signed
   media_type: 'image' | 'video';
   caption: string | null;
+  visibility: 'public' | 'private' | 'groups';
   like_count: number;
   skip_count: number;
   comment_count: number;
@@ -100,7 +101,7 @@ export async function getPostDetail(id: string): Promise<PostDetail | null> {
   const { data, error } = await supabase
     .from('posts')
     .select(
-      'id, media_url, media_type, caption, like_count, skip_count, comment_count, user_id, overlays, profiles!posts_user_id_fkey(handle, display_name), post_tags(tags(name))',
+      'id, media_url, media_type, caption, visibility, like_count, skip_count, comment_count, user_id, overlays, profiles!posts_user_id_fkey(handle, display_name), post_tags(tags(name))',
     )
     .eq('id', id)
     .maybeSingle();
@@ -113,6 +114,7 @@ export async function getPostDetail(id: string): Promise<PostDetail | null> {
     media_url: string;
     media_type: 'image' | 'video';
     caption: string | null;
+    visibility: 'public' | 'private' | 'groups';
     like_count: number;
     skip_count: number;
     comment_count: number;
@@ -145,6 +147,7 @@ export async function getPostDetail(id: string): Promise<PostDetail | null> {
     media_url: signed.get(row.media_url) ?? row.media_url,
     media_type: row.media_type,
     caption: row.caption,
+    visibility: row.visibility,
     like_count: row.like_count ?? 0,
     skip_count: row.skip_count ?? 0,
     comment_count: row.comment_count ?? 0,
