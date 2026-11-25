@@ -30,6 +30,8 @@ export type DeckCard = {
   overlays?: unknown;
   /** Deck card served through a paid boost slot (Part 5B). Always labelled. */
   is_boosted?: boolean;
+  /** Sensitive-but-allowed (Part 6B): cover until tapped. Never sent to minors. */
+  sensitive?: boolean;
 };
 
 export type SwipeDirection = 'left' | 'right';

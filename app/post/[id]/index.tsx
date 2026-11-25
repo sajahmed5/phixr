@@ -10,6 +10,7 @@ import { CollectionPicker } from '@/components/collection-picker';
 import { CommentSheet } from '@/components/comments/comment-sheet';
 import { MentionText } from '@/components/mention-text';
 import { PostAnalyticsCard } from '@/components/profile/post-analytics-card';
+import { SensitiveCover } from '@/components/sensitive-cover';
 import { VideoOverlays } from '@/components/video-overlays';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -46,6 +47,8 @@ export default function PostViewScreen() {
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
+  // Sensitive cover (6B): server never serves sensitive posts to minors.
+  const [revealed, setRevealed] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   // Local like/skip state so the viewer can toggle (like ↔ unlike, skip ↔ un-skip).
@@ -242,6 +245,8 @@ export default function PostViewScreen() {
       />
       <GestureDetector gesture={browsePan}>
       <ScrollView contentContainerStyle={styles.content}>
+        <View>
+        {post.sensitive && !revealed ? <SensitiveCover onReveal={() => setRevealed(true)} /> : null}
         {extras.length === 0 ? (
           post.media_type === 'video' ? (
             <PostVideo uri={post.media_url} overlays={post.overlays} />
@@ -278,6 +283,7 @@ export default function PostViewScreen() {
             </View>
           </View>
         )}
+        </View>
 
         {/* Tap the heart to like/unlike, the cross to skip/un-skip. */}
         <View style={styles.stats}>

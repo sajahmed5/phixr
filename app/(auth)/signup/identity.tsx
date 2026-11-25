@@ -1,4 +1,5 @@
 import * as Linking from 'expo-linking';
+import * as SecureStore from 'expo-secure-store';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
@@ -26,6 +27,11 @@ type CheckResult = { handle: string; result: 'available' | 'taken' | 'error' };
 
 const HANDLE_DEBOUNCE_MS = 450;
 const TODAY = new Date();
+/** Under-13 refusal cooldown (brief 6A): a refused date of birth can't simply be
+ *  retried with a new date on this device. SecureStore survives reinstalls on iOS.
+ *  7 days mirrors the server's signup_age_retry_days setting (unreadable pre-auth). */
+const AGE_BLOCK_KEY = 'phixr-age-block-until';
+const AGE_BLOCK_DAYS = 7;
 
 export default function SignupIdentityScreen() {
   const router = useRouter();
@@ -38,6 +44,14 @@ export default function SignupIdentityScreen() {
   const metadata = session?.user?.user_metadata as Partial<SignupIdentityMetadata> | undefined;
 
   const [displayName, setDisplayName] = useState(draft.displayName || metadata?.display_name || '');
+  const [ageBlockedUntil, setAgeBlockedUntil] = useState<Date | null>(null);
+  useEffect(() => {
+    void SecureStore.getItemAsync(AGE_BLOCK_KEY)
+      .then((v) => {
+        if (v && new Date(v) > new Date()) setAgeBlockedUntil(new Date(v));
+      })
+      .catch(() => {});
+  }, []);
   const [handle, setHandle] = useState(draft.handle || metadata?.handle || '');
   const [dob, setDob] = useState<Date | null>(
     draft.dateOfBirth
@@ -107,6 +121,15 @@ export default function SignupIdentityScreen() {
   async function onSubmit() {
     setTouched({ name: true, handle: true, dob: true });
     setFormError(null);
+    // Under-13 (brief 6A): refuse kindly, and remember the refusal on this
+    // device so a different date can't be tried straight away.
+    if (dob && dobStatus(dob) === 'under13') {
+      const until = new Date(Date.now() + AGE_BLOCK_DAYS * 24 * 60 * 60 * 1000);
+      setAgeBlockedUntil(until);
+      void SecureStore.setItemAsync(AGE_BLOCK_KEY, until.toISOString()).catch(() => {});
+      return;
+    }
+    if (ageBlockedUntil && ageBlockedUntil > new Date()) return;
     if (!canSubmit || !dob) return;
 
     const isoDob = toIsoDate(dob);
@@ -174,6 +197,22 @@ export default function SignupIdentityScreen() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Under-13 refusal (brief 6A): a kind full stop, not an error state.
+  if (ageBlockedUntil && ageBlockedUntil > new Date()) {
+    return (
+      <AuthScreen title="See you soon" subtitle=" ">
+        <ThemedText type="default">
+          Phixr is for people aged 13 and up, so we can&apos;t set up your account just yet.
+        </ThemedText>
+        <ThemedText type="default" themeColor="textSecondary">
+          We&apos;re really glad you want to be here — and we&apos;d love to see you when
+          you&apos;re old enough. This device can try again after{' '}
+          {ageBlockedUntil.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}.
+        </ThemedText>
+      </AuthScreen>
+    );
   }
 
   return (
