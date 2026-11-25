@@ -32,6 +32,13 @@ export type DeckCard = {
   is_boosted?: boolean;
   /** Sensitive-but-allowed (Part 6B): cover until tapped. Never sent to minors. */
   sensitive?: boolean;
+  /** Part 8: this card is an ad — always labelled, swipeable like any post. */
+  is_ad?: boolean;
+  ad_id?: string | null;
+  cta_label?: string | null;
+  cta_url?: string | null;
+  /** Plain-English "Why am I seeing this ad?" text from the server. */
+  ad_reason?: string | null;
 };
 
 export type SwipeDirection = 'left' | 'right';
