@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { track, trackFirst } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth-context';
 import { haptics } from '@/lib/haptics';
-import { DECK_BATCH_SIZE, type DeckCard, type FetchBatch, type SwipeDirection } from '@/lib/deck';
+import {
+  arrangeAdPlacement,
+  DECK_BATCH_SIZE,
+  type DeckCard,
+  type FetchBatch,
+  type SwipeDirection,
+} from '@/lib/deck';
 import { registerSwitchFlusher } from '@/lib/accounts';
 import { resolveDeckMedia } from '@/lib/media';
 import { attachPartnershipLabels } from '@/lib/partnerships';
@@ -79,7 +85,9 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
     setStatus('loading');
     loadedIds.current = new Set();
     try {
-      const batch = await attachPartnershipLabels(await resolveDeckMedia(await fetchBatch([])));
+      const batch = arrangeAdPlacement(
+        await attachPartnershipLabels(await resolveDeckMedia(await fetchBatch([]))),
+      );
       batch.forEach((c) => loadedIds.current.add(c.id));
       setCards(batch);
       setLastSwiped(null);
@@ -103,9 +111,12 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
       track('batch_refetch', { size: fresh.length });
       if (fresh.length) {
         setCards((prev) => {
-          const next = [...prev, ...fresh];
+          // Part 13D: place the batch's ad away from sensitive/blocked cards,
+          // checking the boundary against the last card already dealt.
+          const placed = arrangeAdPlacement(fresh, prev[prev.length - 1] ?? null);
+          const next = [...prev, ...placed];
           // Warm the freshly-arrived batch's media (not just when the deck was empty).
-          prefetchMedia(fresh);
+          prefetchMedia(placed);
           return next;
         });
       }

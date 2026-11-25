@@ -42,7 +42,54 @@ export type DeckCard = {
   cta_url?: string | null;
   /** Plain-English "Why am I seeing this ad?" text from the server. */
   ad_reason?: string | null;
+  /** Part 13C: which audience matched — 'broad' | 'personalised' | 'engaged' | 'similar'. */
+  ad_kind?: string | null;
+  /** Part 13D brand safety (set by the advertiser; enforced by arrangeAdPlacement). */
+  ad_avoid_sensitive?: boolean | null;
+  ad_blocked_topics?: string[] | null;
+  ad_blocked_creators?: string[] | null;
 };
+
+/**
+ * Part 13D: client-side deck arrangement for the ad slot. An ad is NEVER
+ * adjacent to a sensitive card (unconditional — brand safety floor), and a
+ * brand's blocked topics/creators keep its ad away from those cards too.
+ * If no clean position exists in the batch, the ad is dropped (shown in a
+ * later batch instead) rather than placed badly. `prevTail` is the last
+ * already-dealt card, so the batch boundary is checked as well.
+ */
+export function arrangeAdPlacement(batch: DeckCard[], prevTail?: DeckCard | null): DeckCard[] {
+  const adIdx = batch.findIndex((c) => c.is_ad);
+  if (adIdx < 0) return batch;
+  const ad = batch[adIdx];
+  const rest = batch.filter((_, i) => i !== adIdx);
+
+  const blockedTopics = (ad.ad_blocked_topics ?? []).map((t) => t.toLowerCase());
+  const blockedCreators = new Set(ad.ad_blocked_creators ?? []);
+  const clean = (c: DeckCard | null | undefined): boolean => {
+    if (!c) return true; // deck edge is always fine
+    if (c.is_ad) return true;
+    if (c.sensitive) return false; // unconditional, whatever the advertiser set
+    if (blockedCreators.has(c.user_id)) return false;
+    if (blockedTopics.length > 0 && c.tags?.some((t) => blockedTopics.includes(t.toLowerCase())))
+      return false;
+    return true;
+  };
+
+  // Prefer the ad's served position; walk outward for the nearest clean slot.
+  const candidates: number[] = [];
+  for (let d = 0; d <= rest.length; d++) {
+    if (adIdx - d >= 0) candidates.push(adIdx - d);
+    if (d > 0 && adIdx + d <= rest.length) candidates.push(adIdx + d);
+  }
+  for (const i of candidates) {
+    const before = i === 0 ? prevTail : rest[i - 1];
+    if (clean(before) && clean(rest[i])) {
+      return [...rest.slice(0, i), ad, ...rest.slice(i)];
+    }
+  }
+  return rest; // no clean slot this batch — don't show the ad badly placed
+}
 
 export type SwipeDirection = 'left' | 'right';
 
