@@ -319,6 +319,24 @@ export default function SettingsScreen() {
             label="Blocked & muted"
             onPress={() => router.push('/settings/blocked')}
           />
+          <LinkRow
+            icon="lock-closed-outline"
+            label="Security & two-step login"
+            onPress={() => router.push('/settings/security')}
+          />
+        </Group>
+
+        <Group title="Your feed & time">
+          <LinkRow
+            icon="heart-circle-outline"
+            label="Your interests"
+            onPress={() => router.push('/settings/interests')}
+          />
+          <LinkRow
+            icon="moon-outline"
+            label="Wellbeing & quiet mode"
+            onPress={() => router.push('/settings/wellbeing')}
+          />
         </Group>
 
         <Group title="Account">

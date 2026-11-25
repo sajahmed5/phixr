@@ -85,6 +85,41 @@ export default function NotificationsScreen() {
     if ((n.type === 'collab_invite' || n.type === 'collab_update') && n.post_id)
       return router.push(`/post/${n.post_id}`);
     if (n.type === 'partnership_update' && n.post_id) return router.push(`/post/${n.post_id}`);
+    if (n.type === 'new_login') {
+      // Part 14C: "This wasn't me" → sign out EVERYWHERE + password-reset email.
+      Alert.alert(
+        'New login to your account',
+        `Your account was used on a new ${String(n.payload.platform ?? '')} device. If this was you (new phone, reinstall), you can ignore this.`,
+        [
+          { text: 'It was me', style: 'cancel' },
+          {
+            text: "This wasn't me",
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                try {
+                  const { secureAccount } = await import('@/lib/security');
+                  await secureAccount();
+                  Alert.alert(
+                    'Account secured',
+                    'Every device is signed out and a password-reset email is on its way.',
+                  );
+                } catch {
+                  Alert.alert(
+                    "Couldn't secure automatically",
+                    'Change your password now from the sign-in screen.',
+                  );
+                } finally {
+                  const { supabase: sb } = await import('@/lib/supabase');
+                  await sb.auth.signOut().catch(() => {});
+                }
+              })();
+            },
+          },
+        ],
+      );
+      return;
+    }
     if (n.type === 'team_invite') {
       const handle = String(n.payload.business_handle ?? n.actor_handle ?? '');
       const role = String(n.payload.role ?? 'team member');
@@ -177,6 +212,7 @@ function Row({ n, onPress }: { n: InboxNotification; onPress: () => void }) {
 }
 
 function leading(n: InboxNotification, theme: ReturnType<typeof useTheme>) {
+  if (n.type === 'new_login') return <Badge icon="lock-closed" bg="#B3261E" />;
   if (n.type === 'reach_milestone') return <Badge icon="rocket" bg="#2E7D46" />;
   if (n.type === 'moderation') return <Badge icon="shield-checkmark" bg={theme.textSecondary} />;
   if (n.actor_avatar_url)
@@ -256,6 +292,8 @@ function message(n: InboxNotification): string {
           : 'declined your co-author invite';
     case 'team_invite':
       return `invited you to their team as ${String(n.payload.role ?? 'a member')} — tap to respond`;
+    case 'new_login':
+      return `New login on a ${String(n.payload.platform ?? 'new')} device — tap if this wasn't you`;
     case 'partnership_update':
       return n.payload.revoked === true
         ? 'withdrew their name from your paid partnership'

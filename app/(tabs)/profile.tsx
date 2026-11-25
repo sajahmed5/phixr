@@ -208,6 +208,7 @@ export default function ProfileScreen() {
       {tab === 'saved' ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           <Chip label="All" active={savedFilter === null} onPress={() => setSavedFilter(null)} theme={theme} />
+          <Chip label="Manage…" active={false} onPress={() => router.push('/collections')} theme={theme} />
           {collections.map((c) => (
             <Chip
               key={c.id}

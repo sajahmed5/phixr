@@ -12,6 +12,7 @@ import {
   type SwipeDirection,
 } from '@/lib/deck';
 import { registerSwitchFlusher } from '@/lib/accounts';
+import { getClientSettings } from '@/lib/settings';
 import { resolveDeckMedia } from '@/lib/media';
 import { attachPartnershipLabels } from '@/lib/partnerships';
 import { SwipeQueue } from '@/lib/swipe-queue';
@@ -48,7 +49,18 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
 
   const [cards, setCards] = useState<DeckCard[]>([]);
   const [status, setStatus] = useState<DeckStatus>('loading');
-  const [lastSwiped, setLastSwiped] = useState<DeckCard | null>(null);
+  // Part 14A: undo the last N swipes (server setting swipe_undo_depth),
+  // newest first. The server replaces each undone swipe in analytics.
+  const [undoStack, setUndoStack] = useState<DeckCard[]>([]);
+  const undoDepth = useRef(3);
+  useEffect(() => {
+    void getClientSettings()
+      .then((cs) => {
+        const d = Number((cs as Record<string, unknown>).swipe_undo_depth);
+        if (Number.isFinite(d) && d >= 1) undoDepth.current = Math.min(d, 10);
+      })
+      .catch(() => {});
+  }, []);
   const [pendingWrites, setPendingWrites] = useState(0);
 
   // All post ids ever loaded this session — passed as the deck's exclude list so the
@@ -60,13 +72,13 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
   // Mirror state into refs so analytics can fire OUTSIDE the setState updaters (keeping
   // updaters pure and dodging double-fires under StrictMode / concurrent rendering).
   const cardsRef = useRef<DeckCard[]>([]);
-  const lastSwipedRef = useRef<DeckCard | null>(null);
+  const undoStackRef = useRef<DeckCard[]>([]);
   useEffect(() => {
     cardsRef.current = cards;
   }, [cards]);
   useEffect(() => {
-    lastSwipedRef.current = lastSwiped;
-  }, [lastSwiped]);
+    undoStackRef.current = undoStack;
+  }, [undoStack]);
   // deck_exhausted: emit once per transition into the exhausted state.
   useEffect(() => {
     if (status === 'exhausted') track('deck_exhausted');
@@ -90,7 +102,7 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
       );
       batch.forEach((c) => loadedIds.current.add(c.id));
       setCards(batch);
-      setLastSwiped(null);
+      setUndoStack([]);
       setStatus(batch.length === 0 ? 'exhausted' : 'ready');
       prefetchMedia(batch);
     } catch {
@@ -188,7 +200,7 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
       setCards((prev) => {
         if (prev.length === 0) return prev;
         const [top, ...rest] = prev;
-        setLastSwiped(top);
+        setUndoStack((st) => [top, ...st].slice(0, undoDepth.current));
         queueRef.current?.enqueueSwipe(top.id, direction);
         prefetchMedia(rest);
         if (rest.length <= REFILL_AT) void fetchMore();
@@ -200,16 +212,17 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
   );
 
   const undo = useCallback(() => {
-    if (lastSwipedRef.current) {
+    if (undoStackRef.current.length > 0) {
       haptics.light();
       track('undo_used');
     }
-    setLastSwiped((prev) => {
-      if (!prev) return null;
-      queueRef.current?.enqueueUndo(prev.id);
-      setCards((cs) => [prev, ...cs]);
+    setUndoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const [last, ...rest] = prev;
+      queueRef.current?.enqueueUndo(last.id);
+      setCards((cs) => [last, ...cs]);
       setStatus((s) => (s === 'exhausted' ? 'ready' : s));
-      return null; // single step back only
+      return rest; // up to swipe_undo_depth steps back
     });
   }, []);
 
@@ -230,7 +243,7 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
   return {
     cards,
     status,
-    canUndo: lastSwiped !== null,
+    canUndo: undoStack.length > 0,
     pendingWrites,
     swipe,
     undo,

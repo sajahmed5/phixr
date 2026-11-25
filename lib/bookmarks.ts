@@ -66,3 +66,21 @@ export async function removeBookmark(postId: string): Promise<void> {
   const { error } = await supabase.rpc('remove_bookmark', { _post_id: postId });
   if (error) throw error;
 }
+
+// ---- Part 14E: collections grow up -----------------------------------------
+export async function renameCollection(id: string, name: string): Promise<void> {
+  const { error } = await supabase.rpc('rename_collection', { _id: id, _name: name });
+  if (error) throw error;
+}
+
+/** Pass EVERY collection id in the wanted order. */
+export async function reorderCollections(ids: string[]): Promise<void> {
+  const { error } = await supabase.rpc('reorder_collections', { _ids: ids });
+  if (error) throw error;
+}
+
+/** Cover must be a post saved in that collection; null returns to automatic. */
+export async function setCollectionCover(id: string, postId: string | null): Promise<void> {
+  const { error } = await supabase.rpc('set_collection_cover', { _id: id, _post_id: postId });
+  if (error) throw error;
+}

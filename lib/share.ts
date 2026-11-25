@@ -46,6 +46,42 @@ export function postLink(postId: string): string {
   return `${POST_LINK_BASE}/${postId}`;
 }
 
+/** Part 14E: public profile link (universal link → app, App Store otherwise). */
+export function profileLink(handle: string): string {
+  return `https://joinphixr.com/u/${encodeURIComponent(handle)}`;
+}
+
+/** OS share sheet for a profile. Profiles are public pages — always allowed. */
+export async function shareProfile(handle: string, displayName?: string | null): Promise<void> {
+  const url = profileLink(handle);
+  const text = `${displayName || `@${handle}`} is on Phixr`;
+  try {
+    if (Platform.OS === 'web') {
+      const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+      if (nav?.share) await nav.share({ title: 'Phixr', text, url });
+      return;
+    }
+    await Share.share({ message: `${text} ${url}`, url });
+  } catch {
+    // user dismissed the sheet — not an error
+  }
+}
+
+/**
+ * Part 14E: download YOUR OWN post's media — fetched to cache, then the OS
+ * share sheet ("Save Image/Video" included). Caller enforces ownership; the
+ * media URL is the already-signed one the screen is displaying.
+ */
+export async function downloadOwnPostMedia(signedUrl: string, mediaType: 'image' | 'video'): Promise<void> {
+  const { File, Paths } = await import('expo-file-system');
+  const ext = mediaType === 'video' ? 'mp4' : 'jpg';
+  const file = new File(Paths.cache, `phixr-${Date.now()}.${ext}`);
+  await File.downloadFileAsync(signedUrl, file);
+  await Share.share(
+    Platform.OS === 'ios' ? { url: file.uri } : { message: file.uri, url: file.uri },
+  );
+}
+
 /**
  * Share a post via the native share sheet (a link to the post).
  *
