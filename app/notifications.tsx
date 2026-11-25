@@ -75,6 +75,8 @@ export default function NotificationsScreen() {
     if ((n.type === 'comment' || n.type === 'reply' || n.type === 'comment_reaction' || n.type === 'mention') && n.post_id)
       return router.push(`/post/${n.post_id}`);
     if (n.type === 'mention' && n.actor_handle) return router.push(`/u/${n.actor_handle}`);
+    if (n.type === 'partnership_request') return router.push('/settings/partnerships');
+    if (n.type === 'partnership_update' && n.post_id) return router.push(`/post/${n.post_id}`);
   }
 
   return (
@@ -203,6 +205,14 @@ function message(n: InboxNotification): string {
           : n.payload.status === 'removed'
             ? 'A post was removed for breaking guidelines'
             : 'Post update';
+    case 'partnership_request':
+      return 'wants to name your business in a paid partnership';
+    case 'partnership_update':
+      return n.payload.revoked === true
+        ? 'withdrew their name from your paid partnership'
+        : n.payload.accepted === true
+          ? 'approved your paid partnership'
+          : 'declined your paid partnership';
     default:
       return '';
   }

@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { getPartnershipLabels } from '@/lib/partnerships';
 import { getBookmarkState } from '@/lib/bookmarks';
 import { fetchComments, type CommentView } from '@/lib/comments';
 import { parseVideoOverlays } from '@/lib/video-overlays';
@@ -177,6 +178,19 @@ export default function PostViewScreen() {
     void load();
   }, [load]);
 
+  // ASA disclosure (brief 9A): the paid-partnership label on the post page.
+  const [partnerLabel, setPartnerLabel] = useState<string | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    void getPartnershipLabels([id])
+      .then((m) => alive && setPartnerLabel(m.get(id) ?? null))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
   const doReport = (reason: string) => {
     if (!post) return;
     reportPost(post.id, reason)
@@ -317,6 +331,11 @@ export default function PostViewScreen() {
           ) : null}
         </View>
 
+        {partnerLabel ? (
+          <ThemedText type="smallBold" themeColor="textSecondary">
+            {partnerLabel}
+          </ThemedText>
+        ) : null}
         {post.caption ? (
           <MentionText type="default" style={styles.caption}>
             {post.caption}
