@@ -16,12 +16,8 @@ export async function setAdsConsent(choice: 'personalised' | 'non_personalised')
 }
 
 export async function getAdsConsent(): Promise<AdsConsent> {
-  const { data: u } = await supabase.auth.getUser();
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('ads_consent')
-    .eq('id', u.user!.id)
-    .single();
+  // Own-row read via get_my_profile (ads_consent is own-only post column-privacy).
+  const { data, error } = await supabase.rpc('get_my_profile');
   if (error) return 'unset';
   return ((data as { ads_consent: AdsConsent }).ads_consent ?? 'unset') as AdsConsent;
 }

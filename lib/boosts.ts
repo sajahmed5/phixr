@@ -62,6 +62,12 @@ export async function createBoost(
     _tag_ids: tagIds,
   });
   if (error) throw error;
+  // Launch funnel (brief 10): first boost — count only, no post/targeting data.
+  const { data: u } = await supabase.auth.getUser();
+  if (u.user?.id) {
+    const { trackFirst } = await import('@/lib/analytics');
+    void trackFirst(u.user.id, 'first_boost');
+  }
   return data as string;
 }
 

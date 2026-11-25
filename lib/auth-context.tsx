@@ -57,14 +57,12 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 /** Fetch the caller's profile, auto-creating it from signup metadata when possible. */
 async function resolveProfile(user: User): Promise<ProfileResolution> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .maybeSingle();
-
+  // Own-row read via get_my_profile(): the full row (DOB, settings, consent)
+  // is own-only once the profiles column-privacy migration lands — other
+  // profiles expose only their public columns.
+  const { data, error } = await supabase.rpc('get_my_profile');
   if (error) return { kind: 'error' };
-  if (data) return { kind: 'have', profile: data as Profile };
+  if (data && (data as Profile).id) return { kind: 'have', profile: data as Profile };
 
   // No profile yet. If the identity we captured at signup is on the auth user, create the
   // row now — this covers "verified but closed the app before the profile was written".
@@ -83,7 +81,7 @@ async function resolveProfile(user: User): Promise<ProfileResolution> {
         terms_version: md.terms_version ?? null,
         terms_accepted_at: md.terms_accepted_at ?? null,
       })
-      .select('*')
+      .select('id')
       .single();
 
     if (!insertError && created) {
@@ -93,7 +91,12 @@ async function resolveProfile(user: User): Promise<ProfileResolution> {
       const { setAdsConsent } = await import('@/lib/ads');
       await setAdsConsent(md.ads_personalised === true ? 'personalised' : 'non_personalised')
         .catch(() => {});
-      return { kind: 'have', profile: created as Profile };
+      // Launch funnel (brief 10): the account is now fully created.
+      const { trackFirst } = await import('@/lib/analytics');
+      void trackFirst(user.id, 'signup_completed');
+      const { data: mine } = await supabase.rpc('get_my_profile');
+      if (mine && (mine as Profile).id) return { kind: 'have', profile: mine as Profile };
+      return { kind: 'error' };
     }
     // Insert failed (most likely the handle was taken since signup) → fall through and let
     // the identity screen resume so the user can pick a new handle.

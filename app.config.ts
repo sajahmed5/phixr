@@ -59,6 +59,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         // authToken is read from SENTRY_AUTH_TOKEN in the build env by the plugin.
       },
     ],
+    // In-app purchases (Part 10): native StoreKit / Play Billing wiring. The
+    // JS side only loads the module when the server-side iap_enabled setting
+    // is on, so Expo Go development is unaffected.
+    'expo-iap',
   ],
   extra: {
     ...config.extra,
