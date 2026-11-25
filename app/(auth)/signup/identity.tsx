@@ -112,10 +112,11 @@ export default function SignupIdentityScreen() {
 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   // Ads personalisation (brief 8D, moved to signup): its own switch beside the
-  // T&C tick — never bundled into it — shown to adults only, on by default,
+  // T&C tick — never bundled into it — shown to adults only, OFF by default
+  // (UK GDPR: pre-ticked boxes aren't valid consent — ICO guidance), and
   // changeable any time in Settings. Minors are always non-personalised (the
   // server refuses anything else).
-  const [adsPersonalised, setAdsPersonalised] = useState(true);
+  const [adsPersonalised, setAdsPersonalised] = useState(false);
   const adsChoice = dobState === 'adult' && adsPersonalised;
 
   const canSubmit =
