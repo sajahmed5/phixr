@@ -41,7 +41,7 @@ const RADII = [1, 5, 10, 25, 50];
 export default function SettingsScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, reload, signOut } = useAuth();
+  const { profile, reload, signOut, signOutAll } = useAuth();
 
   const [isPrivate, setIsPrivate] = useState(profile?.is_private ?? false);
   const [privacyPromptOpen, setPrivacyPromptOpen] = useState(false);
@@ -358,6 +358,11 @@ export default function SettingsScreen() {
             busy={busy === 'export'}
           />
           <LinkRow icon="log-out-outline" label="Sign out" onPress={() => signOut()} />
+          <LinkRow
+            icon="log-out-outline"
+            label="Sign out of all accounts"
+            onPress={() => void signOutAll()}
+          />
           <LinkRow
             icon="trash-outline"
             label="Delete account"

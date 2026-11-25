@@ -100,6 +100,14 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
   const doSubmit = useCallback(async () => {
     const c = ref.current;
     if (!c || !c.result || c.posting || c.postedId) return;
+    // Part 11: a composition begun under one account must never publish under
+    // another (account switch mid-upload). user is the account that opened
+    // the composer via this provider render.
+    const { data: now } = await (await import('@/lib/supabase')).supabase.auth.getUser();
+    if (!now.user || (user?.id && now.user.id !== user.id)) {
+      set((x) => ({ ...x, posting: false, postError: 'Account changed — reopen the composer to post.' }));
+      return;
+    }
     set((x) => ({ ...x, posting: true, postError: null }));
     try {
       const id = await createPost({

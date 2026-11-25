@@ -139,6 +139,14 @@ export class ViewEventQueue {
     void this.flush();
   }
 
+  /** Part 11: awaitable drain for account switching (closes the open view
+   *  and lands the buffer under the right account first). */
+  async drain(): Promise<void> {
+    this.noteTopCard(null);
+    while (this.flushing) await new Promise((r) => setTimeout(r, 50));
+    await this.flush();
+  }
+
   private onAppState = (state: AppStateStatus) => {
     if (state === 'active') {
       if (this.current && this.current.visibleSince == null) {
