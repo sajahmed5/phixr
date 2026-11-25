@@ -79,3 +79,74 @@ Responsive pass done: below 800px the sidebar becomes a wrap-around top bar and 
 - Part 5 `award_message_activity` (DM reply points) still untested end-to-end on devices (needs two phones).
 - Sentry alert rules + PostHog funnel dashboards: console-side setup.
 - Apple ITMS-90725 (informational, on build 6): built with the iOS 26.5 SDK; from **April 2027** Apple requires the iOS 27 SDK (Xcode 27). Nothing to do now — eas.json uses the default build image, so this resolves itself with the next Expo SDK / EAS image upgrade, which must happen before April 2027 anyway.
+
+---
+
+# Brief 2 addendum (Parts 11–17, 2026-11-25)
+
+## 10. App Privacy "nutrition label" — delta for the next submission
+
+Everything below is NEW data since build 8 (which covered Parts 1–10). Phixr still
+does **no cross-app tracking** — engaged/similar ad audiences (Part 13) use only
+first-party, on-platform behaviour behind explicit personalised-ads consent, so the
+"Data Used to Track You" section stays EMPTY and App Tracking Transparency is still
+not required.
+
+Declare / confirm in App Store Connect → App Privacy:
+
+| Data | Label category | Linked to identity | Purpose | Notes |
+| --- | --- | --- | --- | --- |
+| Hashed device identifier (Part 11, `account_devices`) | Identifiers → Device ID | Yes | App functionality (security: multi-account integrity, new-login alerts, ban evasion) | Salted SHA-256 of a per-install keychain id; the raw id never leaves the device |
+| Login alerts / sign-in device history (Part 14C) | Usage Data → Other | Yes | App functionality (account security) | Platform + first/last seen per account |
+| Two-step login enrolment + backup-code hashes (14C) | Not a label item | — | — | TOTP secrets live with Apple-hosted auth (Supabase); codes stored only as SHA-256 |
+| Interests / muted topics / learned weights (14A) | Usage Data → Product Interaction | Yes | App functionality, personalisation | Already partially covered by swipes in build 8's label — confirm "personalisation" purpose is ticked |
+| Wellbeing preferences incl. quiet hours (14D) | User Content → Other | Yes | App functionality | Quiet window, auto-reply text, reminder minutes |
+| Ad interaction for retargeting (13C) | Usage Data → Advertising Data | Yes | Third-party advertising (first-party data, no tracking) | Only for consenting adults; serving-time matching; advertisers never receive lists |
+| Team membership & activity log (13A) | Usage Data → Other | Yes | App functionality | Business staff actions recorded for the business owner |
+| Business insights (13E) | Not user-linked in output | — | Analytics | Stored with viewer id for daily dedupe but NEVER exposed; label as Analytics → Product Interaction, linked |
+
+## 11. Apple guideline check (new features)
+
+- **2FA / backup codes (14C):** no guideline issues; codes shown in-app, shareable to
+  the user's own storage. Recovery is support-mediated (no SMS) — fine.
+- **IAP (10) unchanged** by Brief 2; boosts still Apple IAP, advertiser top-ups are
+  web-only (Stripe) and the app never links out to purchase — compliant with 3.1.1/3.1.3(b).
+- **UGC (1.2):** moderation, blocking, reporting all pre-date Brief 2; Part 17 closed
+  the scheduled-publishing moderation bypass, strengthening the 1.2 story.
+- **Ads (2.5.14 / 5.1.1):** personalised ads remain consent-gated; the per-ad
+  "Why am I seeing this" text now covers engaged/similar honestly.
+- **Weekly digest + login-alert pushes (14C/15):** Apple requires opt-out for
+  marketing-ish pushes — the digest has an in-app toggle and a daily push cap; fine.
+- ⚠ Pre-ticked ads-consent at signup (Part 9 decision) remains the one flagged
+  compliance risk (ICO, not Apple).
+
+## 12. Brief 2 security review (Part 17) — outcome
+
+Checked with impersonated test accounts against dev: account-switching isolation
+(cross-account reads all empty), team roles (refusals + instant removal), 2FA gates
+(admin seats, payouts), retargeting privacy (floor, stamp, serving-time matching),
+collab/highlight audience rules, group-membership secrecy (member can see a group
+post but never the group, membership or post→group link; groups posts unreachable
+from deck/search/public links), and the anon API surface (exactly 6 functions).
+
+**Found and FIXED in `20261125600000_p17_security_hardening`:**
+1. `ad_accounts.balance_pence`/`status` were client-writable → self-credited ad money. 
+2. `ad_sets.audience_validated_at` client-writable → 50-person-floor bypass; also
+   audience changes now clear the validation stamp.
+3. Direct `comments` INSERT skipped add_comment's limits/hidden words.
+4. Direct `swipes` INSERT/DELETE skipped record_swipe/undo accounting.
+5. Scheduler trusted client-written draft `media_status` → a forged draft could
+   publish flagged or someone else's media; verdicts are now locked in server-side
+   at save time (`server_media_status` trigger) and re-checked at publish.
+6. Dead write grants revoked (venues, pipeline_verdicts, handle_history, …).
+
+## 13. Brief 2 performance (dev project, 2026-11-25)
+
+- Scheduled publishing under load: 150 due drafts drained in 3 cron passes,
+  ~90–106 ms per 50-draft pass (every one published, zero stuck).
+- Account switching: server calls after a switch total <2 ms
+  (get_my_profile 0.6 ms, get_client_settings 0.2 ms); Part 11 measured the full
+  on-device switch as effectively instant (SecureStore session swap).
+- Content calendar query: 0.5 ms with 150 rows.
+- A/B report over 60 days of impressions: 11 ms.
+- get_deck (now with muted-topics + hide-likes joins): 62 ms at current data size.
