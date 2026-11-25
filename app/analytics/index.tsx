@@ -8,6 +8,8 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { cancelBoost, getMyBoosts, type MyBoost } from '@/lib/boosts';
+import { confirm } from '@/lib/confirm';
 import { signMediaPaths } from '@/lib/media';
 import {
   getAccountAnalytics,
@@ -25,20 +27,23 @@ export default function AnalyticsScreen() {
   const [account, setAccount] = useState<AccountAnalytics | null>(null);
   const [tags, setTags] = useState<TagReach[] | null>(null);
   const [overview, setOverview] = useState<CreatorOverview | null>(null);
+  const [boosts, setBoosts] = useState<MyBoost[]>([]);
   const [thumbs, setThumbs] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     setError(false);
     try {
-      const [a, t, o] = await Promise.all([
+      const [a, t, o, b] = await Promise.all([
         getAccountAnalytics(),
         getTagReach(),
         getCreatorOverview(),
+        getMyBoosts(10).catch(() => [] as MyBoost[]),
       ]);
       setAccount(a);
       setTags(t);
       setOverview(o);
+      setBoosts(b);
       const paths = [o.best_post?.thumbnail_url, o.worst_post?.thumbnail_url].filter(
         (p): p is string => !!p,
       );
@@ -47,6 +52,16 @@ export default function AnalyticsScreen() {
       setError(true);
     }
   }, []);
+
+  const stopBoost = async (b: MyBoost) => {
+    if (!(await confirm('Stop this boost?', 'Unused whole days are refunded in points.', 'Stop'))) return;
+    try {
+      await cancelBoost(b.id);
+      void load();
+    } catch {
+      // next refresh shows the truth
+    }
+  };
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mount data-loader; sets loading/error state internally
     void load();
@@ -110,6 +125,31 @@ export default function AnalyticsScreen() {
                 onPress={() => router.push(`/analytics/post/${overview.worst_post!.post_id}`)}
               />
             ) : null}
+          </Section>
+        ) : null}
+
+        {/* Boost results (Part 5B): extra views, likes and points per like */}
+        {boosts.length > 0 ? (
+          <Section title="Your boosts" subtitle="Views and likes during each boost window.">
+            {boosts.map((b) => (
+              <View key={b.id} style={[styles.boostRow, { borderColor: theme.border }]}>
+                <View style={styles.boostInfo}>
+                  <ThemedText type="smallBold">
+                    {b.status === 'active' ? '● Running' : b.status === 'ended' ? 'Finished' : 'Stopped'}
+                    {' · '}
+                    {b.days} day{b.days === 1 ? '' : 's'} · {b.points_cost.toLocaleString()} pts
+                  </ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {Number(b.window_views).toLocaleString()} views ·{' '}
+                    {Number(b.window_likes).toLocaleString()} likes
+                    {b.points_per_like != null ? ` · ${b.points_per_like} pts/like` : ''}
+                  </ThemedText>
+                </View>
+                {b.status === 'active' ? (
+                  <Button title="Stop" variant="secondary" onPress={() => void stopBoost(b)} />
+                ) : null}
+              </View>
+            ))}
           </Section>
         ) : null}
 
@@ -391,4 +431,13 @@ const styles = StyleSheet.create({
   hourBarWrap: { flex: 1, width: '80%', justifyContent: 'flex-end' },
   hourBar: { width: '100%', borderRadius: 2, minHeight: 2 },
   hourLabel: { fontSize: 8 },
+  boostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    padding: 12,
+  },
+  boostInfo: { flex: 1, gap: 2 },
 });

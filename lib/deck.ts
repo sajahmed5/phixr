@@ -28,6 +28,8 @@ export type DeckCard = {
   carousel?: { media_url: string; media_type: 'image' | 'video' }[];
   /** Video text/sticker overlays (raw jsonb from the RPC); parse with parseVideoOverlays. */
   overlays?: unknown;
+  /** Deck card served through a paid boost slot (Part 5B). Always labelled. */
+  is_boosted?: boolean;
 };
 
 export type SwipeDirection = 'left' | 'right';

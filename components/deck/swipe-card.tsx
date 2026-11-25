@@ -144,6 +144,15 @@ export const SwipeCard = memo(function SwipeCard({
             ))}
           </View>
         ) : null}
+        {/* Paid placement is ALWAYS labelled (brief 5B). */}
+        {card.is_boosted ? (
+          <View style={styles.boostedChip} pointerEvents="none">
+            <Ionicons name="trending-up" size={12} color="#fff" />
+            <ThemedText type="small" style={styles.boostedText}>
+              Boosted
+            </ThemedText>
+          </View>
+        ) : null}
         <Pressable
           onPress={isActive && onOpenProfile ? () => onOpenProfile(card.poster_handle) : undefined}
           disabled={!isActive || !onOpenProfile}
@@ -284,6 +293,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   posterRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  boostedChip: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 6,
+  },
+  boostedText: { color: '#fff' },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)' },
   avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   avatarInitial: { color: '#fff', fontWeight: '700' },

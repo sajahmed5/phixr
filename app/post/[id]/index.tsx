@@ -344,6 +344,14 @@ export default function PostViewScreen() {
               variant="secondary"
               onPress={() => router.push(`/post/${post.id}/likers`)}
             />
+            {/* Boost (Part 5B): public approved posts only; the server enforces. */}
+            {post.visibility === 'public' ? (
+              <Button
+                title="Boost this post"
+                variant="secondary"
+                onPress={() => router.push(`/boost/${post.id}`)}
+              />
+            ) : null}
           </>
         ) : null}
 
