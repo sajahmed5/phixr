@@ -7,6 +7,7 @@ import { haptics } from '@/lib/haptics';
 import { DECK_BATCH_SIZE, type DeckCard, type FetchBatch, type SwipeDirection } from '@/lib/deck';
 import { resolveDeckMedia } from '@/lib/media';
 import { SwipeQueue } from '@/lib/swipe-queue';
+import { ViewEventQueue } from '@/lib/view-events';
 
 export type DeckStatus = 'loading' | 'ready' | 'exhausted' | 'error';
 
@@ -47,6 +48,7 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
   const loadedIds = useRef<Set<string>>(new Set());
   const fetchingMore = useRef(false);
   const queueRef = useRef<SwipeQueue | null>(null);
+  const viewQueueRef = useRef<ViewEventQueue | null>(null);
   // Mirror state into refs so analytics can fire OUTSIDE the setState updaters (keeping
   // updaters pure and dodging double-fires under StrictMode / concurrent rendering).
   const cardsRef = useRef<DeckCard[]>([]);
@@ -120,19 +122,36 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
     }
   }, [fetchBatch, prefetchMedia]);
 
-  // Bootstrap: swipe queue + first batch, per user.
+  // Bootstrap: swipe queue + view-event recorder + first batch, per user.
   useEffect(() => {
     if (!uid) return;
     const queue = new SwipeQueue(uid, setPendingWrites);
     queueRef.current = queue;
     void queue.init();
+    const viewQueue = new ViewEventQueue(uid);
+    viewQueueRef.current = viewQueue;
+    void viewQueue.init();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadInitial();
     return () => {
       queue.dispose();
       queueRef.current = null;
+      // Closes the in-progress view as 'none' and flushes the buffer.
+      viewQueue.dispose();
+      viewQueueRef.current = null;
     };
   }, [uid, loadInitial]);
+
+  // Watch-time tracking (Part 1B): the top card is "the card being shown".
+  // A change of top card opens the next view; the previous one was already
+  // closed with its real direction by `swipe`, or closes as 'none' here
+  // (deck reload / undo / nothing left).
+  useEffect(() => {
+    const top = cards[0];
+    viewQueueRef.current?.noteTopCard(
+      top ? { id: top.id, media_type: top.media_type } : null,
+    );
+  }, [cards]);
 
   const swipe = useCallback(
     (direction: SwipeDirection) => {
@@ -142,6 +161,9 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
         haptics.light(); // light tap on a committed swipe
         track('swipe', { direction });
         if (uid) void trackFirst(uid, 'first_swipe');
+        // Close the top card's view event with its real direction (dwell is
+        // measured inside the recorder; the batch flushes on its own cadence).
+        viewQueueRef.current?.noteSwipe(direction);
       }
       setCards((prev) => {
         if (prev.length === 0) return prev;

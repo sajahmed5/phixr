@@ -12,6 +12,7 @@ import { AppState, Pressable, StyleSheet, View } from 'react-native';
 
 import type { DeckCard } from '@/lib/deck';
 import { getMuted, setMutedPreference, subscribeMute } from '@/lib/mute-preference';
+import { reportVideoCompleted, reportVideoPosition } from '@/lib/video-progress';
 
 const VIDEO_CAP_SECONDS = 60;
 
@@ -80,12 +81,22 @@ function CardVideo({ card, isActive }: { card: DeckCard; isActive: boolean }) {
   }, [isActive, player]);
 
   // Enforce the 60s cap: loop back to the start once a clip passes the cap.
+  // The same tick feeds watch-time tracking (Part 1B): the view-event recorder
+  // reads the last-known position at swipe time via lib/video-progress.
   useEffect(() => {
     const sub = player.addListener('timeUpdate', ({ currentTime }) => {
+      reportVideoPosition(card.id, currentTime, player.duration);
       if (currentTime >= VIDEO_CAP_SECONDS) player.currentTime = 0;
     });
     return () => sub.remove();
-  }, [player]);
+  }, [card.id, player]);
+
+  // "Watched to the end": playToEnd fires at the natural end of the clip
+  // (looping restarts also mark completion inside reportVideoPosition).
+  useEffect(() => {
+    const sub = player.addListener('playToEnd', () => reportVideoCompleted(card.id));
+    return () => sub.remove();
+  }, [card.id, player]);
 
   function toggleMute() {
     const next = !muted;
