@@ -163,16 +163,6 @@ export async function getPostDetail(id: string): Promise<PostDetail | null> {
   };
 }
 
-/** Reasons offered when reporting a post (shared by the share sheet + post viewer). */
-export const POST_REPORT_REASONS = [
-  'Nudity or sexual content',
-  'Violence or dangerous acts',
-  'Harassment or bullying',
-  'Hate speech or symbols',
-  'Spam or scam',
-  'Something else',
-] as const;
-
 /** File a report against a post. Mirrors reportUser/reportComment (RLS-guarded insert). */
 // ---- carousel extras ---------------------------------------------------------
 /** One extra carousel item (position >= 1; the post row itself is item 0). */

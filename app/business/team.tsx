@@ -26,6 +26,7 @@ import { confirm } from '@/lib/confirm';
  */
 
 const ROLES: TeamRole[] = ['admin', 'editor', 'analyst', 'moderator'];
+const roleLabel = (r: string) => r.charAt(0).toUpperCase() + r.slice(1);
 
 export default function BusinessTeamScreen() {
   const theme = useTheme();
@@ -98,7 +99,7 @@ export default function BusinessTeamScreen() {
                 {m.profiles?.handle ? `@${m.profiles.handle}` : 'Member'}
               </ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {m.role}
+                {roleLabel(m.role)}
                 {m.status === 'pending' ? ' · invite pending' : ''}
               </ThemedText>
             </View>
@@ -126,7 +127,7 @@ export default function BusinessTeamScreen() {
                 { borderColor: role === r ? BRAND.accent : theme.border },
                 role === r ? styles.roleChipOn : null,
               ]}>
-              <ThemedText type="smallBold">{r}</ThemedText>
+              <ThemedText type="smallBold">{roleLabel(r)}</ThemedText>
             </Pressable>
           ))}
         </View>

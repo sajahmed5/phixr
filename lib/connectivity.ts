@@ -17,6 +17,11 @@ import { AppState } from 'react-native';
 type Listener = (online: boolean) => void;
 
 let netState: NetInfoState | null = null;
+let netStateAt = 0;
+// When a server last answered one of our requests. Proof of a working connection that
+// beats NetInfo, which can get stuck on "no connection" (seen on the iOS simulator after
+// the Mac slept, and possible on phones after network changes in the background).
+let serverReachedAt = 0;
 let simulatedOffline = false;
 let lastOnline = true;
 const listeners = new Set<Listener>();
@@ -29,7 +34,9 @@ function computeOnline(): boolean {
   // probes) — and wrongly believing we're offline would hold back messages and posts
   // that could have been sent. Believing we're online when we're not only costs a
   // failed attempt that the queues retry.
-  return netState.isConnected !== false;
+  if (netState.isConnected !== false) return true;
+  // NetInfo says no connection. Believe it, unless a server has answered since it said so.
+  return serverReachedAt > netStateAt;
 }
 
 function emitIfChanged(): void {
@@ -41,13 +48,28 @@ function emitIfChanged(): void {
 
 NetInfo.addEventListener((state) => {
   netState = state;
+  netStateAt = Date.now();
   emitIfChanged();
 });
+
+/**
+ * Call when a request got ANY response from a server (even an error status): the
+ * connection works, whatever NetInfo last reported. Flips the app back online (the banner
+ * hides, the outboxes send) if NetInfo was stuck on offline.
+ */
+export function reportServerReached(): void {
+  if (simulatedOffline) return;
+  serverReachedAt = Date.now();
+  emitIfChanged();
+}
 
 // Coming back to the foreground is a good moment to retry anything queued, even if the
 // connection never visibly dropped (iOS may have suspended the app mid-request).
 AppState.addEventListener('change', (s) => {
-  if (s === 'active' && computeOnline()) for (const l of listeners) l(true);
+  if (s !== 'active') return;
+  // Ask NetInfo to re-check rather than trusting a state from before the app slept.
+  void NetInfo.refresh().catch(() => {});
+  if (computeOnline()) for (const l of listeners) l(true);
 });
 
 export function isOnline(): boolean {

@@ -267,7 +267,9 @@ function Section({
 }) {
   return (
     <View style={styles.section}>
-      <ThemedText type="subtitle">{title}</ThemedText>
+      <ThemedText type="smallBold" style={styles.sectionTitle} accessibilityRole="header">
+        {title}
+      </ThemedText>
       {subtitle ? (
         <ThemedText type="small" themeColor="textSecondary">
           {subtitle}
@@ -279,6 +281,8 @@ function Section({
 }
 
 const styles = StyleSheet.create({
+  // Section headings: smaller than the screen title so the numbers stay the focus.
+  sectionTitle: { fontSize: 20, lineHeight: 26 },
   statValue: { fontSize: 20, lineHeight: 26, fontWeight: '700' },
   statLabel: { textAlign: 'center' },
   fill: { flex: 1 },

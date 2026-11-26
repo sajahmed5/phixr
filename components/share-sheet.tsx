@@ -36,7 +36,8 @@ import { getBookmarkState } from '@/lib/bookmarks';
 import { awardShare } from '@/lib/points';
 import { useAndroidBack } from '@/lib/use-android-back';
 import type { Conversation } from '@/lib/messages';
-import { POST_REPORT_REASONS, reportPost } from '@/lib/posts';
+import { reportPost } from '@/lib/posts';
+import { confirmReported, POST_REPORT_REASONS } from '@/lib/reports';
 import { getShareTargets, postLink, sharePost, type SharePerson } from '@/lib/share';
 
 type Target =
@@ -170,7 +171,7 @@ export function ShareSheet({
 
   const doReport = (reason: string) => {
     reportPost(post.id, reason)
-      .then(() => Alert.alert('Thanks for reporting', 'Our team will review this post.'))
+      .then(() => confirmReported(reason, { kind: 'post', id: post.id }))
       .catch(() => Alert.alert("Couldn't report", 'Please try again in a moment.'));
   };
 
