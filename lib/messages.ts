@@ -114,7 +114,14 @@ export async function createGroup(name: string, memberIds: string[]): Promise<st
 }
 export async function sendMessage(
   cid: string,
-  opts: { body?: string; mediaUrl?: string; sharedPostId?: string; replyToId?: string },
+  opts: {
+    body?: string;
+    mediaUrl?: string;
+    sharedPostId?: string;
+    replyToId?: string;
+    /** Duplicate-proof key: sending again with the same id returns the same message. */
+    clientId?: string;
+  },
 ): Promise<string> {
   const { data, error } = await supabase.rpc('send_message', {
     _cid: cid,
@@ -122,6 +129,7 @@ export async function sendMessage(
     _media_url: opts.mediaUrl ?? null,
     _shared_post_id: opts.sharedPostId ?? null,
     _reply_to_id: opts.replyToId ?? null,
+    ...(opts.clientId ? { _client_id: opts.clientId } : {}),
   });
   if (error) throw error;
   awardMessageActivity(cid); // reward messaging (server-capped ~5/day)
@@ -199,19 +207,38 @@ export function subscribeToThread(
     onTyping: (payload: { userId: string; handle: string }) => void;
   },
 ): { unsubscribe: () => void; sendTyping: (userId: string, handle: string) => void } {
-  const channel = supabase.channel(`conv:${cid}`, { config: { broadcast: { self: false } } });
-  channel
+  // Row changes: a channel of our own (unique topic). The realtime client hands back the
+  // existing channel for a topic it already has, and adding postgres_changes handlers to
+  // an already-subscribed channel throws — which crashed the app whenever the same chat
+  // was opened twice (e.g. tapping its notification while it was already open).
+  const rows = supabase.channel(uniqueChannel(`conv-rows:${cid}`));
+  rows
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${cid}` }, (p) => handlers.onMessage(p.new as { id: string }))
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${cid}` }, (p) => handlers.onMessage(p.new as { id: string }))
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_members', filter: `conversation_id=eq.${cid}` }, () => handlers.onMemberChange())
-    .on('broadcast', { event: 'typing' }, ({ payload }) => handlers.onTyping(payload as { userId: string; handle: string }))
     .subscribe();
+
+  // Typing: must share the topic every member uses. If this chat is already open further
+  // down the stack, reuse its channel for sending (that screen keeps the indicator).
+  const typingTopic = `conv:${cid}`;
+  const existing = supabase.getChannels().find((c) => c.topic === `realtime:${typingTopic}`);
+  const typing =
+    existing ??
+    supabase
+      .channel(typingTopic, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'typing' }, ({ payload }) =>
+        handlers.onTyping(payload as { userId: string; handle: string }),
+      )
+      .subscribe();
+  const ownsTyping = !existing;
+
   return {
     unsubscribe: () => {
-      void supabase.removeChannel(channel);
+      void supabase.removeChannel(rows);
+      if (ownsTyping) void supabase.removeChannel(typing);
     },
     sendTyping: (userId, handle) => {
-      void channel.send({ type: 'broadcast', event: 'typing', payload: { userId, handle } });
+      void typing.send({ type: 'broadcast', event: 'typing', payload: { userId, handle } });
     },
   };
 }

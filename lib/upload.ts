@@ -1,6 +1,7 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Platform } from 'react-native';
 
+import { isOnline } from '@/lib/connectivity';
 import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '@/lib/supabase';
 import { findOrCreateTag } from '@/lib/tags';
 import type { VideoOverlay } from '@/lib/video-overlays';
@@ -70,8 +71,16 @@ export async function prepareForUpload(media: PickedMedia): Promise<PickedMedia>
 
 // A rejection by the adult-content scan is a normal outcome, not a thrown error.
 export class UploadRejected extends Error {}
-// Everything else (network, 5xx, timeout) is retryable.
-export class UploadFailed extends Error {}
+// Everything else. `retryable` is true for no-connection / timeout / server hiccups (worth
+// trying again later, e.g. from the outbox) and false when the server refused the file
+// itself (too large, unsupported) — retrying that would fail the same way forever.
+export class UploadFailed extends Error {
+  retryable: boolean;
+  constructor(message: string, retryable = true) {
+    super(message);
+    this.retryable = retryable;
+  }
+}
 
 /**
  * Upload media to the processing pipeline via XHR so we get real upload progress
@@ -84,6 +93,8 @@ export function uploadToPipeline(
   signal?: { aborted: boolean; onAbort: (cb: () => void) => void },
 ): Promise<PipelineResult> {
   return new Promise(async (resolve, reject) => {
+    // Fail fast with no signal rather than waiting out the 2-minute upload timeout.
+    if (!isOnline()) return reject(new UploadFailed('No connection.'));
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     if (!token) return reject(new UploadFailed('Not signed in.'));
@@ -136,9 +147,12 @@ export function uploadToPipeline(
       } else if (xhr.status === 422 && body.error === 'rejected') {
         reject(new UploadRejected(String(body.reason ?? 'content_policy')));
       } else if (xhr.status === 413) {
-        reject(new UploadFailed(String(body.message ?? 'That file is too large to process.')));
+        reject(new UploadFailed(String(body.message ?? 'That file is too large to process.'), false));
       } else {
-        reject(new UploadFailed(String(body.message ?? `Upload failed (${xhr.status}).`)));
+        // 4xx (other than auth/rate limits) means the server refused this file for good.
+        const permanent =
+          xhr.status >= 400 && xhr.status < 500 && ![401, 408, 429].includes(xhr.status);
+        reject(new UploadFailed(String(body.message ?? `Upload failed (${xhr.status}).`), !permanent));
       }
     };
     xhr.onerror = () => reject(new UploadFailed('Network error during upload.'));
@@ -150,6 +164,9 @@ export function uploadToPipeline(
 }
 
 export type CreatePostInput = {
+  /** Client-generated post id. Set by the offline outbox so a retry after a lost response
+   *  finds the post it already created instead of publishing a second copy. */
+  id?: string;
   result: PipelineResult;
   /** Carousel extras (already pipeline-processed), in display order after the cover. */
   extras?: PipelineResult[];
@@ -181,9 +198,13 @@ export async function createPost(input: CreatePostInput): Promise<string> {
   if (!uid) throw new Error('Not signed in.');
 
   const { result } = input;
+  // With a client id, every step below is one atomic insert; a unique violation on retry
+  // means that step already landed on an earlier attempt, so it is skipped.
+  const alreadyDone = (e: { code?: string } | null) => !!input.id && e?.code === '23505';
   const { data: post, error } = await supabase
     .from('posts')
     .insert({
+      ...(input.id ? { id: input.id } : {}),
       user_id: uid,
       media_url: result.media_url,
       thumbnail_url: result.thumbnail_url,
@@ -200,15 +221,19 @@ export async function createPost(input: CreatePostInput): Promise<string> {
     })
     .select('id')
     .single();
-  if (error) throw error;
-  const postId = (post as { id: string }).id;
+  if (error && !alreadyDone(error)) throw error;
+  const postId = input.id ?? (post as { id: string }).id;
 
   // Group audience: attach the chosen groups right away. Until these rows land
   // a 'groups' post is visible to nobody but the owner (safe failure mode).
   if (input.visibility === 'groups') {
     if (!input.groupIds?.length) throw new Error('Pick at least one group.');
     const { setPostGroups } = await import('@/lib/groups');
-    await setPostGroups(postId, input.groupIds);
+    try {
+      await setPostGroups(postId, input.groupIds);
+    } catch (e) {
+      if (!alreadyDone(e as { code?: string })) throw e;
+    }
   }
 
   // Carousel extras: one row per additional media item. Each consumed its own
@@ -223,7 +248,7 @@ export async function createPost(input: CreatePostInput): Promise<string> {
         media_type: r.media_type,
       })),
     );
-    if (mediaErr) throw mediaErr;
+    if (mediaErr && !alreadyDone(mediaErr)) throw mediaErr;
   }
 
   // Resolve tag names → ids (find-or-create), then attach with provenance.
@@ -237,7 +262,7 @@ export async function createPost(input: CreatePostInput): Promise<string> {
   }));
   if (rows.length) {
     const { error: tagErr } = await supabase.from('post_tags').insert(rows);
-    if (tagErr) throw tagErr;
+    if (tagErr && !alreadyDone(tagErr)) throw tagErr;
   }
   return postId;
 }

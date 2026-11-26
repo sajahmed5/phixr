@@ -25,6 +25,7 @@ import { TextField } from '@/components/ui/text-field';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { useOnline } from '@/lib/connectivity';
 import { listGroups, type AudienceGroup } from '@/lib/groups';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
@@ -44,8 +45,9 @@ export default function ComposeScreen() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { composition, updateDraft, submit, retryUpload, clear } = useUpload();
+  const { composition, updateDraft, submit, retryUpload, clear, queueOffline } = useUpload();
   const { user, profile } = useAuth();
+  const online = useOnline();
   const [groups, setGroups] = useState<AudienceGroup[] | null>(null);
   const [defaultApplied, setDefaultApplied] = useState(false);
   const [promoNudge, setPromoNudge] = useState(false);
@@ -105,6 +107,12 @@ export default function ComposeScreen() {
   };
 
   const onSaveDraft = async () => {
+    // No connection: keep it on the phone; it lands in Drafts once the signal is back.
+    if (composition?.phase === 'failed' && composition.uploadRetryable && !actingBiz) {
+      queueOffline('draft');
+      router.replace('/drafts');
+      return;
+    }
     const payload = buildPayload();
     if (!payload || savingDraft) return;
     setSavingDraft(true);
@@ -230,11 +238,21 @@ export default function ComposeScreen() {
     if (composition?.postedId) router.replace('/');
   }, [composition?.postedId, router]);
 
+  // Signal came back while the composer is still open after a no-connection failure:
+  // pick the upload up again without making the user tap Retry.
+  const waitingForSignal = composition?.phase === 'failed' && composition.uploadRetryable;
+  useEffect(() => {
+    if (waitingForSignal && online) retryUpload();
+  }, [waitingForSignal, online, retryUpload]);
+
   if (!composition) return <ThemedView style={styles.fill} />;
 
   const { media, extras, draft, phase, progress, result, rejection, uploadError } = composition;
   const analysing = phase === 'uploading';
   const flagged = result?.moderation_status === 'flagged';
+  // Upload couldn't start or finish for lack of signal: posting still works — it waits in
+  // the outbox and goes up automatically.
+  const offlineMode = phase === 'failed' && composition.uploadRetryable;
   const canPost =
     draft.tags.length > 0 &&
     phase !== 'rejected' &&
@@ -243,6 +261,11 @@ export default function ComposeScreen() {
 
   function onPost() {
     if (!canPost) return;
+    if (offlineMode) {
+      queueOffline('post');
+      router.replace('/');
+      return;
+    }
     submit();
     // Uploading or ready, posting continues in the background → go to the feed.
     router.replace('/');
@@ -305,6 +328,7 @@ export default function ComposeScreen() {
             phase={phase}
             progress={progress}
             uploadError={uploadError}
+            offline={offlineMode}
             onRetry={retryUpload}
             flagged={flagged}
           />
@@ -520,7 +544,9 @@ export default function ComposeScreen() {
             </ThemedText>
           ) : (
             <Button
-              title={phase === 'uploading' ? 'Post when ready' : 'Post'}
+              title={
+                offlineMode ? 'Post when back online' : phase === 'uploading' ? 'Post when ready' : 'Post'
+              }
               onPress={onPost}
               disabled={!canPost}
               loading={composition.posting}
@@ -531,7 +557,9 @@ export default function ComposeScreen() {
               title="Save draft"
               variant="secondary"
               onPress={onSaveDraft}
-              disabled={phase !== 'ready' || savingDraft}
+              disabled={
+                savingDraft || (offlineMode ? !!actingBiz : phase !== 'ready')
+              }
             />
             <Button
               title="Schedule…"
@@ -574,16 +602,29 @@ function UploadStatus({
   phase,
   progress,
   uploadError,
+  offline,
   onRetry,
   flagged,
 }: {
   phase: string;
   progress: number;
   uploadError: string | null;
+  offline: boolean;
   onRetry: () => void;
   flagged: boolean;
 }) {
   const theme = useTheme();
+  if (phase === 'failed' && offline) {
+    return (
+      <View style={styles.statusRow}>
+        <Ionicons name="cloud-offline-outline" size={18} color={theme.textSecondary} />
+        <ThemedText type="small" themeColor="textSecondary" style={{ flex: 1 }}>
+          No connection. You can still post — it&apos;s saved on your phone and goes up
+          automatically when you&apos;re back online.
+        </ThemedText>
+      </View>
+    );
+  }
   if (phase === 'failed') {
     return (
       <View style={styles.statusRow}>

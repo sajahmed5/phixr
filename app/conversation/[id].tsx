@@ -21,10 +21,11 @@ import { ActionMenu, type ActionOption } from '@/components/ui/action-menu';
 import { useTheme } from '@/hooks/use-theme';
 import { useKeyboardHeight } from '@/lib/use-keyboard-height';
 import { useAuth } from '@/lib/auth-context';
-import { sendMessageAsBusiness } from '@/lib/business';
 import { confirm } from '@/lib/confirm';
+import { useOnline } from '@/lib/connectivity';
+import { loadThread, saveThread } from '@/lib/message-cache';
+import { useOutbox } from '@/lib/outbox-provider';
 import { blockUser } from '@/lib/profile';
-import { uploadToPipeline } from '@/lib/upload';
 import {
   deleteMessage,
   getConversation,
@@ -36,7 +37,6 @@ import {
   reportConversation,
   reportMessage,
   respondToRequest,
-  sendMessage,
   setMuted,
   subscribeToReactions,
   subscribeToThread,
@@ -50,22 +50,16 @@ const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '💯'];
 const PAGE = 30;
 const REPORT_REASONS = ['Spam', 'Harassment or hate', 'Inappropriate content', 'Other'];
 
-// Message images go through the SAME upload pipeline as posts (EXIF strip, adult +
-// CSAM scan, transcode). A flagged/removed result is never sent.
-async function scanAndUpload(uri: string): Promise<string> {
-  const result = await uploadToPipeline({ uri, type: 'image', mime: 'image/jpeg' }, () => {});
-  if (result.moderation_status === 'flagged' || result.moderation_status === 'removed') {
-    throw new Error('That image was blocked by our safety check.');
-  }
-  return result.media_url;
-}
-
+// A message from the outbox that hasn't reached the server yet. Message images still go
+// through the SAME upload pipeline as posts (EXIF strip, adult + CSAM scan) before being
+// sent — the outbox does that once there's signal, and never sends a blocked image.
 type Pending = {
   tempId: string;
   body: string | null;
   mediaUri: string | null;
   replyToId: string | null;
-  status: 'sending' | 'failed';
+  status: 'waiting' | 'sending' | 'failed';
+  error: string | null;
   created_at: string;
 };
 
@@ -86,7 +80,8 @@ export default function ConversationScreen() {
 
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [pending, setPending] = useState<Pending[]>([]);
+  const { messages: outbox, enqueueMessage, retryMessage, removeMessage } = useOutbox();
+  const online = useOnline();
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasOlder, setHasOlder] = useState(false);
@@ -118,13 +113,25 @@ export default function ConversationScreen() {
 
   const refresh = useCallback(async () => {
     if (!cid) return;
-    const [d, msgs] = await Promise.all([getConversation(cid), getMessages(cid, PAGE)]);
-    setDetail(d);
-    setMessages(msgs);
-    setHasOlder(msgs.length === PAGE);
-    if (!acting) void markRead(cid); // team members aren't conversation members
-    void refreshReactions();
-  }, [cid, acting, refreshReactions]);
+    try {
+      const [d, msgs] = await Promise.all([getConversation(cid), getMessages(cid, PAGE)]);
+      setDetail(d);
+      setMessages(msgs);
+      setHasOlder(msgs.length === PAGE);
+      if (meId) void saveThread(meId, acting ? `${cid}:${asBusiness}` : cid, d, msgs);
+      if (!acting) void markRead(cid); // team members aren't conversation members
+      void refreshReactions();
+    } catch {
+      // No signal: show the last copy we saw. New messages can still be written — they
+      // wait in the outbox and send when the connection is back.
+      if (!meId) return;
+      const cached = await loadThread(meId, acting ? `${cid}:${asBusiness}` : cid);
+      if (cached) {
+        setDetail((prev) => prev ?? cached.detail);
+        setMessages((prev) => (prev.length ? prev : cached.messages));
+      }
+    }
+  }, [cid, acting, asBusiness, meId, refreshReactions]);
 
   // React to a message (double-tap → 💯, or the reaction row). Toggles off if I tap the
   // same emoji again. Optimistic; realtime + refetch reconcile.
@@ -199,29 +206,65 @@ export default function ConversationScreen() {
     [meId, myHandle],
   );
 
+  // Every message goes through the outbox: saved on the phone first, then sent in order —
+  // straight away with signal, or as soon as it returns. Business replies are text-only
+  // and sent as the business.
   const doSend = useCallback(
-    async (opts: { body?: string; mediaUri?: string; replyToId?: string; tempId?: string }) => {
-      const tempId = opts.tempId ?? `${Date.now()}-${Math.random()}`;
-      setPending((prev) => [
-        { tempId, body: opts.body ?? null, mediaUri: opts.mediaUri ?? null, replyToId: opts.replyToId ?? null, status: 'sending', created_at: new Date().toISOString() },
-        ...prev.filter((p) => p.tempId !== tempId),
-      ]);
-      try {
-        if (acting && asBusiness) {
-          // Business replies are text-only; sent as the business.
-          await sendMessageAsBusiness(asBusiness, cid, opts.body ?? '');
-        } else {
-          const mediaUrl = opts.mediaUri ? await scanAndUpload(opts.mediaUri) : undefined;
-          await sendMessage(cid, { body: opts.body, mediaUrl, replyToId: opts.replyToId });
-        }
-        await refresh(); // loads the real row; then drop the optimistic placeholder
-        setPending((prev) => prev.filter((p) => p.tempId !== tempId));
-      } catch (e) {
-        setPending((prev) => prev.map((p) => (p.tempId === tempId ? { ...p, status: 'failed' } : p)));
-        if (e instanceof Error && e.message.includes('safety')) Alert.alert('Blocked', e.message);
-      }
+    async (opts: { body?: string; mediaUri?: string; replyToId?: string }) => {
+      enqueueMessage({
+        cid,
+        asBusiness: acting && asBusiness ? asBusiness : null,
+        body: opts.body ?? null,
+        mediaUri: acting ? null : (opts.mediaUri ?? null),
+        replyToId: acting ? null : (opts.replyToId ?? null),
+      });
     },
-    [cid, acting, asBusiness, refresh],
+    [cid, acting, asBusiness, enqueueMessage],
+  );
+
+  // This chat's queued messages, newest first (the list is inverted). A delivered one
+  // stays as a placeholder until the refreshed thread contains the real message, so the
+  // bubble never blinks out.
+  const pending = useMemo<Pending[]>(() => {
+    const mine = outbox.filter(
+      (m) => m.cid === cid && (acting ? m.asBusiness === asBusiness : !m.asBusiness),
+    );
+    return mine
+      .filter((m) => !(m.status === 'sent' && messages.some((x) => x.id === m.sentId)))
+      .map((m) => ({
+        tempId: m.clientId,
+        body: m.body,
+        mediaUri: m.mediaUri,
+        replyToId: m.replyToId,
+        status: m.status === 'sent' ? ('sending' as const) : m.status,
+        error: m.error,
+        created_at: m.createdAt,
+      }))
+      .reverse();
+  }, [outbox, cid, acting, asBusiness, messages]);
+
+  // When one of this chat's messages is delivered, load the thread so the real message
+  // (with its read receipt) replaces the placeholder.
+  const sentKey = outbox
+    .filter((m) => m.cid === cid && m.status === 'sent')
+    .map((m) => m.sentId)
+    .join(',');
+  useEffect(() => {
+    if (!sentKey) return;
+    const t = setTimeout(() => void refresh(), 0);
+    return () => clearTimeout(t);
+  }, [sentKey, refresh]);
+
+  const onPendingPress = useCallback(
+    (p: Pending) => {
+      if (p.status !== 'failed') return;
+      Alert.alert('Not sent', p.error ?? "This message couldn't be sent.", [
+        { text: 'Delete', style: 'destructive', onPress: () => removeMessage(p.tempId) },
+        { text: 'Try again', onPress: () => retryMessage(p.tempId) },
+        { text: 'Cancel', style: 'cancel' },
+      ]);
+    },
+    [removeMessage, retryMessage],
   );
 
   const onSendText = useCallback(async () => {
@@ -322,7 +365,8 @@ export default function ConversationScreen() {
               reactions={'tempId' in item ? [] : reactions.filter((r) => r.message_id === item.id)}
               onReact={reactTo}
               onLongPress={(m) => setMsgMenu(m)}
-              onRetry={(p) => void doSend({ body: p.body ?? undefined, mediaUri: p.mediaUri ?? undefined, replyToId: p.replyToId ?? undefined, tempId: p.tempId })}
+              online={online}
+              onRetry={onPendingPress}
               onOpenPost={(pid) => router.push({ pathname: '/post/[id]', params: { id: pid } })}
               theme={theme}
             />
@@ -426,6 +470,7 @@ function MessageBubble({
   isGroup,
   seen,
   reactions,
+  online,
   onReact,
   onLongPress,
   onRetry,
@@ -436,6 +481,7 @@ function MessageBubble({
   meId?: string;
   isGroup?: boolean;
   seen: boolean;
+  online: boolean;
   reactions: MessageReaction[];
   onReact: (messageId: string, emoji: string) => void;
   onLongPress: (m: Message) => void;
@@ -468,7 +514,11 @@ function MessageBubble({
   }
 
   const onTap = () => {
-    if (isPending || deleted) return;
+    if (isPending) {
+      onRetry(item);
+      return;
+    }
+    if (deleted) return;
     const now = Date.now();
     if (now - lastTap.current < 300) {
       onReact(item.id, '💯'); // double-tap → 💯
@@ -534,7 +584,14 @@ function MessageBubble({
         <Animated.Text pointerEvents="none" style={[styles.burst, burstStyle]}>💯</Animated.Text>
         <View style={[styles.meta, { justifyContent: mine ? 'flex-end' : 'flex-start' }]}>
           {isPending && item.status === 'failed' ? (
-            <Pressable onPress={() => onRetry(item)}><ThemedText type="small" style={{ color: theme.danger }}>Failed · Retry</ThemedText></Pressable>
+            <Pressable onPress={() => onRetry(item)} accessibilityRole="button">
+              <ThemedText type="small" style={{ color: theme.danger }}>Not sent · Tap for options</ThemedText>
+            </Pressable>
+          ) : isPending && item.status === 'waiting' && !online ? (
+            <View style={styles.waitingRow} accessibilityLabel="Waiting for connection. Sends automatically.">
+              <Ionicons name="time-outline" size={12} color={theme.textSecondary} />
+              <ThemedText type="small" themeColor="textSecondary">Waiting for connection</ThemedText>
+            </View>
           ) : isPending ? (
             <ThemedText type="small" themeColor="textSecondary">Sending…</ThemedText>
           ) : seen ? (
@@ -626,6 +683,7 @@ const styles = StyleSheet.create({
   sharedThumb: { width: 64, height: 64 },
   msgImage: { width: 200, height: 200, borderRadius: 10, backgroundColor: '#222' },
   meta: { flexDirection: 'row', marginTop: 2, marginHorizontal: 6 },
+  waitingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 3, marginHorizontal: 4 },
   reactionChip: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth },
   burst: { position: 'absolute', alignSelf: 'center', top: 6, fontSize: 46 },

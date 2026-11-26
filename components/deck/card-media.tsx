@@ -12,6 +12,7 @@ import { AppState, Pressable, StyleSheet, View } from 'react-native';
 
 import type { DeckCard } from '@/lib/deck';
 import { getMuted, setMutedPreference, subscribeMute } from '@/lib/mute-preference';
+import { cachedVideoUri } from '@/lib/video-cache';
 import { reportVideoCompleted, reportVideoPosition } from '@/lib/video-progress';
 
 const VIDEO_CAP_SECONDS = 60;
@@ -46,7 +47,10 @@ function CardVideo({ card, isActive }: { card: DeckCard; isActive: boolean }) {
   // across sessions rather than resetting per card.
   const [muted, setMuted] = useState(getMuted());
 
-  const player = useVideoPlayer(card.media_url, (p) => {
+  // Plays the copy downloaded ahead on Wi-Fi when there is one (instant start, works with
+  // no signal); otherwise streams as before.
+  const source = useMemo(() => cachedVideoUri(card.media_url), [card.media_url]);
+  const player = useVideoPlayer(source, (p) => {
     p.loop = true;
     p.muted = getMuted();
     p.timeUpdateEventInterval = 1;

@@ -245,9 +245,15 @@ export async function getBusinessConversations(businessId: string): Promise<Busi
   return (data ?? []) as BusinessConversation[];
 }
 
-export async function sendMessageAsBusiness(businessId: string, conversationId: string, body: string): Promise<string> {
+export async function sendMessageAsBusiness(
+  businessId: string,
+  conversationId: string,
+  body: string,
+  clientId?: string,
+): Promise<string> {
   const { data, error } = await supabase.rpc('send_message_as_business', {
     _business: businessId, _cid: conversationId, _body: body,
+    ...(clientId ? { _client_id: clientId } : {}),
   });
   if (error) throw error;
   return data as string;

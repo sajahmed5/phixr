@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
-
+import { isPermanentServerError, onConnectivityChange } from '@/lib/connectivity';
 import { recordSwipe, undoSwipe, type SwipeDirection } from '@/lib/deck';
 
 type SwipeOp = { id: string; type: 'swipe'; postId: string; direction: SwipeDirection };
@@ -40,8 +39,8 @@ export class SwipeQueue {
     } catch {
       // corrupt/absent — start empty
     }
-    this.netUnsub = NetInfo.addEventListener((state) => {
-      if (state.isConnected) void this.process();
+    this.netUnsub = onConnectivityChange((online) => {
+      if (online) void this.process();
     });
     this.notify();
     void this.process();
@@ -118,8 +117,11 @@ export class SwipeQueue {
           if (op.type === 'swipe') await recordSwipe(op.postId, op.direction);
           else await undoSwipe(op.postId);
           ok = true;
-        } catch {
-          ok = false;
+        } catch (e) {
+          // The server answered and refused (e.g. the post was deleted while this swipe
+          // waited offline). Retrying can never succeed, and keeping it would block every
+          // swipe queued behind it — drop it and carry on.
+          ok = isPermanentServerError(e);
         }
         this.inFlight = false;
         if (!ok) return; // keep the op; retry on the next trigger (reconnect / flush)

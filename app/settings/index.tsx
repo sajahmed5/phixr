@@ -22,6 +22,7 @@ import { getAdsConsent, setAdsConsent } from '@/lib/ads';
 import { analytics } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth-context';
 import { confirm } from '@/lib/confirm';
+import { isSimulatingOffline, setSimulatedOffline } from '@/lib/connectivity';
 import {
   deleteAccount,
   getHideLikes,
@@ -45,6 +46,7 @@ export default function SettingsScreen() {
   const { profile, reload, signOut, signOutAll } = useAuth();
 
   const [isPrivate, setIsPrivate] = useState(profile?.is_private ?? false);
+  const [simOffline, setSimOffline] = useState(isSimulatingOffline());
   const [privacyPromptOpen, setPrivacyPromptOpen] = useState(false);
   const [approveFollowers, setApproveFollowers] = useState(profile?.require_follow_approval ?? true);
   const [radius, setRadius] = useState(profile?.search_radius_miles ?? 5);
@@ -274,6 +276,20 @@ export default function SettingsScreen() {
             </>
           )}
         </Group>
+
+        {__DEV__ ? (
+          <Group title="Developer">
+            <ToggleRow
+              label="Simulate offline"
+              sublabel="Development builds only. The app behaves as if the signal dropped: requests and uploads fail, and posts, messages and swipes wait to send."
+              value={simOffline}
+              onValueChange={(v) => {
+                setSimulatedOffline(v);
+                setSimOffline(v);
+              }}
+            />
+          </Group>
+        ) : null}
 
         <Group title="Help">
           <LinkRow

@@ -19,6 +19,7 @@ import { awardActiveDay } from '@/lib/points';
 import { AuthProvider, useAuth, type AuthStatus } from '@/lib/auth-context';
 import { NotificationsProvider } from '@/lib/notifications-provider';
 import { initSentry, Sentry } from '@/lib/sentry';
+import { OutboxProvider } from '@/lib/outbox-provider';
 import { UploadManagerProvider } from '@/lib/upload-manager';
 
 // Initialise crash reporting as early as possible — before any component renders — so a
@@ -195,15 +196,17 @@ function RootLayout() {
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <AuthProvider>
             <NotificationsProvider>
-              <UploadManagerProvider>
-                {/* Wraps the app so a report can screenshot the screen behind it. */}
-                <ReportIssueProvider>
-                  <RootNavigator />
-                  <UploadBanner />
-                  <CameraCoachMark />
-                  <OfflineBanner />
-                </ReportIssueProvider>
-              </UploadManagerProvider>
+              <OutboxProvider>
+                <UploadManagerProvider>
+                  {/* Wraps the app so a report can screenshot the screen behind it. */}
+                  <ReportIssueProvider>
+                    <RootNavigator />
+                    <UploadBanner />
+                    <CameraCoachMark />
+                    <OfflineBanner />
+                  </ReportIssueProvider>
+                </UploadManagerProvider>
+              </OutboxProvider>
             </NotificationsProvider>
           </AuthProvider>
           <StatusBar style="auto" />

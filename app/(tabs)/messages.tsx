@@ -23,6 +23,7 @@ import {
 } from '@/lib/messages';
 import { confirm } from '@/lib/confirm';
 import { markInboxSeen } from '@/lib/inbox-badge';
+import { loadInbox, saveInbox } from '@/lib/message-cache';
 import { useRefresh } from '@/lib/use-refresh';
 import { TAB_BAR_CLEARANCE } from '@/constants/config';
 
@@ -30,6 +31,7 @@ export default function MessagesScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const uid = user?.id;
   const [items, setItems] = useState<Conversation[]>([]);
   const [tab, setTab] = useState<'messages' | 'general' | 'requests'>('messages');
   // Part 12E: per-conversation folder (Primary = 'messages' tab, General, Requests).
@@ -47,12 +49,18 @@ export default function MessagesScreen() {
       ]);
       setItems(convos);
       setFolders(f);
+      if (uid) void saveInbox(uid, convos);
     } catch {
-      /* keep */
+      // No signal: show the last inbox we saw so chats can still be opened (and new
+      // messages written — they send once the connection is back).
+      if (uid) {
+        const cached = await loadInbox(uid);
+        if (cached) setItems((prev) => (prev.length ? prev : cached));
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [uid]);
 
   const refresh = useRefresh(load);
 

@@ -5,7 +5,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommentSheet } from '@/components/comments/comment-sheet';
-import { DeckError, DeckExhausted, DeckSkeleton } from '@/components/deck/deck-states';
+import { DeckError, DeckExhausted, DeckOffline, DeckSkeleton } from '@/components/deck/deck-states';
 import { SwipeDeck } from '@/components/deck/swipe-deck';
 import { ShareSheet } from '@/components/share-sheet';
 import { ThemedText } from '@/components/themed-text';
@@ -36,6 +36,9 @@ type DeckViewProps = {
    * "you're caught up". Defaults to the generic "all caught up" card.
    */
   renderEmpty?: (ctx: DeckEmptyContext) => React.ReactNode;
+  /** Keep the unseen cards on the phone so this deck still shows something when opened
+   *  with no signal. Set only on the main feed. */
+  persistKey?: string;
 };
 
 /**
@@ -44,9 +47,9 @@ type DeckViewProps = {
  * state machine. The two tabs differ only by the `fetchBatch` they pass and the optional
  * `header` / `renderEmpty` slots — there is a single deck implementation.
  */
-export function DeckView({ fetchBatch, header, renderEmpty, hasTabBar = true }: DeckViewProps) {
+export function DeckView({ fetchBatch, header, renderEmpty, hasTabBar = true, persistKey }: DeckViewProps) {
   const { cards, status, canUndo, pendingWrites, swipe, undo, retry, adjustCommentCount } =
-    useDeck(fetchBatch);
+    useDeck(fetchBatch, { persistKey });
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -130,6 +133,8 @@ export function DeckView({ fetchBatch, header, renderEmpty, hasTabBar = true }: 
         {pendingWrites > 3 ? <PendingPill count={pendingWrites} top={insets.top + 8} /> : null}
       </View>
     );
+  } else if (status === 'offline') {
+    body = <DeckOffline onRetry={retry} />;
   } else if (status === 'error') {
     body = <DeckError onRetry={retry} />;
   } else if (status === 'exhausted') {
