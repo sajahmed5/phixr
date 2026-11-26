@@ -51,6 +51,70 @@ any business that uses them. **To check before we build:**
 Zapier lets an invite-only app work straight away, so our two companies don't have to wait for
 Zapier's review.
 
+## Being "integration-ready": the kit a scheduler expects
+
+When Metricool, Buffer and others add a network, their engineers expect the same standard pack
+that TikTok, Instagram, LinkedIn and Bluesky offer. With all of it ready, adding Phixr should
+take them **days, not months**, and a "no" can't be because we were hard to work with.
+
+**1. Self-serve developer sign-up.** A scheduler's engineer registers their app on
+`developers.joinphixr.com`. They get test keys straight away, and asking to go live is one button.
+We approve each live app, the way TikTok and Meta do.
+
+**2. "Connect your Phixr account" sign-in.** This is the standard OAuth 2.0 screen that every
+scheduler already uses for the other networks: the user logs in to Phixr, sees "Metricool wants to
+schedule posts and read insights for @hgcare", and taps Allow. Only business accounts can connect.
+Team admins can connect the business they manage. A business can see and remove connected apps in
+Settings.
+
+**3. The actions schedulers use.** This list is the same everywhere:
+- *Who am I*: account name, handle, picture, business status, and which businesses this person manages
+- *Upload media*: by link or direct upload, with large videos sent in parts
+- *Create a post*: post now, schedule for later, or save as a draft. Caption, alt text, post or story
+- *Check a post*: processing, held for review, scheduled, published (with its link) or failed (with the reason)
+- *Cancel or delete* a scheduled or published post
+- *Insights*: views, likes, saves, shares and comments per post, plus follower count over time.
+  **Metricool is mainly an analytics tool, so it will ask for these.** We already have them
+  (`get_post_analytics`, `get_account_analytics`). They stay anonymous totals: never who skipped,
+  and never under-18 data.
+
+**4. Notifications back to the scheduler (webhooks).** We tell them when a post publishes,
+fails, is held for review, or when a business disconnects. They don't have to keep asking.
+
+**5. A test mode.** Partners can create test posts that only the posting account can see, so
+their engineers can build and test without anything appearing in real feeds. We'd give them
+ready-made test business accounts.
+
+**6. Clear rules written down.** These cover media sizes, lengths, formats and aspect ratios;
+caption and hashtag limits; rate limits; error codes in plain words; and what moderation does
+(posts can be held). There's also a version promise: "v1 won't break, and we give 6 months'
+notice before any change."
+
+**7. Documentation that engineers trust.** A quickstart ("your first scheduled post in 10
+minutes"), a full reference in the industry-standard format (an OpenAPI file), a ready-to-run
+example collection, a changelog and a status page.
+
+**8. The business side.** Developer Terms and app-review criteria; a brand kit (Phixr logo,
+colours, "Post to Phixr" naming rules); a `developers@joinphixr.com` inbox; and a one-page
+"Why add Phixr" sheet with who's on Phixr, growth, and businesses asking for it.
+
+**Out of scope for v1:** comments, inbox and DMs, likes and follows. Schedulers add these later,
+and they bring the most bot and privacy risk.
+
+**Rough effort for the whole kit:** about **6–8 weeks** of building:
+
+| Piece | Effort |
+|-------|--------|
+| Connect sign-in, app registration, keys, Settings → Connected apps | ~2 weeks |
+| Post, media (link + large video), status, cancel actions + test mode | ~2 weeks |
+| Insights + webhooks | ~1 week |
+| Activity log, rate limits, abuse controls | ~0.5 week |
+| Developer site, docs, OpenAPI file, examples, brand kit | ~1–1.5 weeks |
+| Our own Zapier app built on it (also proves the kit works end to end) | ~1 week |
+
+Building our own Zapier app is the real test of the kit. If we can connect Metricool to Phixr
+through Zapier with nothing but the public docs, an outside scheduler can do the same.
+
 ## What the Publishing API would need
 
 Most of the hard parts already exist. The API would be a new front door into machinery we've
