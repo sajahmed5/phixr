@@ -20,6 +20,8 @@ import { analytics, track } from '@/lib/analytics';
 // Side-effect import: starts listening for incoming links at launch (password reset).
 import '@/lib/incoming-link';
 import { loadMutePreference } from '@/lib/mute-preference';
+// Side-effect import: applies the light-by-default appearance before the first frame.
+import { loadThemePreference } from '@/lib/theme-preference';
 import { awardActiveDay } from '@/lib/points';
 import { AuthProvider, useAuth, type AuthStatus } from '@/lib/auth-context';
 import { NotificationsProvider } from '@/lib/notifications-provider';
@@ -215,6 +217,7 @@ function RootNavigator() {
       if (on) track('session_start');
     });
     void loadMutePreference();
+    void loadThemePreference();
   }, []);
 
   // Identify by user id ONLY once signed in; also set the Sentry user to just the id.
