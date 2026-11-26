@@ -40,8 +40,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     ...(config.plugins ?? []),
     // Sentry's Expo config plugin: wires the native SDK and, at build time, uploads
-    // source maps. `organization`/`project`/`authToken` come from env so nothing
-    // Sentry-account-specific is committed.
+    // source maps. `organization`/`project` default to the Phixr Sentry slugs (not
+    // secrets) so a local checkout, `eas update` and the EAS builder all produce the same
+    // plugin config, and therefore the same runtime fingerprint (see fingerprint.config.js).
+    // The env vars still override them; `authToken` stays env-only.
     //
     // NOTE: leaving these unset does NOT skip the upload — the Gradle/Xcode hook still
     // shells out to sentry-cli, which exits 1 and fails the whole native build.
@@ -54,8 +56,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       '@sentry/react-native/expo',
       {
-        organization: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT,
+        organization: process.env.SENTRY_ORG || 'phixr',
+        project: process.env.SENTRY_PROJECT || 'react-native',
         // authToken is read from SENTRY_AUTH_TOKEN in the build env by the plugin.
       },
     ],
