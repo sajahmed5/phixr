@@ -4,7 +4,6 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, TextInput, View, ScrollView } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -29,7 +28,6 @@ import { TAB_BAR_CLEARANCE, BRAND } from '@/constants/config';
 
 export default function MessagesScreen() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const uid = user?.id;
   const [items, setItems] = useState<Conversation[]>([]);
@@ -153,7 +151,7 @@ export default function MessagesScreen() {
           keyExtractor={(c) => c.id}
           refreshControl={<RefreshControl {...refresh} tintColor={theme.textSecondary} />}
           contentContainerStyle={[
-            { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE },
+            { paddingBottom: TAB_BAR_CLEARANCE },
             shown.length === 0 && styles.center,
           ]}
           renderItem={({ item }) => (
@@ -203,7 +201,7 @@ export default function MessagesScreen() {
 
       <Pressable
         onPress={() => router.push('/messages/new')}
-        style={[styles.fab, { backgroundColor: BRAND.accent, bottom: insets.bottom + TAB_BAR_CLEARANCE }]}
+        style={[styles.fab, { backgroundColor: BRAND.accent, bottom: TAB_BAR_CLEARANCE }]}
         accessibilityLabel="New message">
         <Ionicons name="create-outline" size={24} color="#fff" />
       </Pressable>

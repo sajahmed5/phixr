@@ -356,11 +356,6 @@ export default function SettingsScreen() {
 
         <Group title="Your feed & time">
           <LinkRow
-            icon="heart-circle-outline"
-            label="Your interests"
-            onPress={() => router.push('/settings/interests')}
-          />
-          <LinkRow
             icon="moon-outline"
             label="Wellbeing & quiet mode"
             onPress={() => router.push('/settings/wellbeing')}

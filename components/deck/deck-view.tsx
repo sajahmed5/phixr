@@ -1,18 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StyleSheet, View } from 'react-native';
 
 import { CommentSheet } from '@/components/comments/comment-sheet';
 import { DeckError, DeckExhausted, DeckOffline, DeckSkeleton } from '@/components/deck/deck-states';
 import { SwipeDeck } from '@/components/deck/swipe-deck';
 import { ShareSheet } from '@/components/share-sheet';
 import { ThemedText } from '@/components/themed-text';
-import { ActionMenu, type ActionOption } from '@/components/ui/action-menu';
 import { useTheme } from '@/hooks/use-theme';
 import type { DeckCard, FetchBatch } from '@/lib/deck';
-import { muteTopicByName, showMoreLikeThis } from '@/lib/interests';
 import { useDeck } from '@/lib/use-deck';
 import { useWellbeingTimers } from '@/lib/use-wellbeing-timers';
 import { getMyWellbeing } from '@/lib/wellbeing';
@@ -50,52 +47,16 @@ type DeckViewProps = {
 export function DeckView({ fetchBatch, header, renderEmpty, hasTabBar = true, persistKey }: DeckViewProps) {
   const { cards, status, canUndo, pendingWrites, swipe, undo, retry, adjustCommentCount } =
     useDeck(fetchBatch, { persistKey });
-  const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const [commentsCard, setCommentsCard] = useState<DeckCard | null>(null);
   const [shareCardState, setShareCardState] = useState<DeckCard | null>(null);
-  // Part 14A: per-card options (not interested / show more).
-  const [menuCard, setMenuCard] = useState<DeckCard | null>(null);
-  const [muteTag, setMuteTag] = useState<string | null>(null);
   // Part 14D: viewer-side hide-like-counts + the time/break reminders.
   const [hideCounts, setHideCounts] = useState(false);
   useEffect(() => {
     void getMyWellbeing().then((w) => setHideCounts(w.hide_like_counts_others)).catch(() => {});
   }, []);
   useWellbeingTimers();
-
-  const cardMenuOptions = useCallback((): ActionOption[] => {
-    if (!menuCard) return [];
-    const opts: ActionOption[] = [
-      {
-        label: 'Show me more like this',
-        onPress: () => {
-          void showMoreLikeThis(menuCard.id).catch(() => {});
-          setMenuCard(null);
-        },
-      },
-    ];
-    for (const t of menuCard.tags.slice(0, 3)) {
-      opts.push({
-        label: `Not interested in #${t}`,
-        onPress: () => {
-          setMenuCard(null);
-          setMuteTag(t);
-        },
-      });
-    }
-    return opts;
-  }, [menuCard]);
-
-  const doMute = useCallback((tag: string, days: 30 | 90 | null) => {
-    setMuteTag(null);
-    void muteTopicByName(tag, days)
-      .then(() =>
-        Alert.alert('Done', days ? `You'll see less #${tag} for ${days} days.` : `#${tag} is off for good — change it in Settings → Interests.`),
-      )
-      .catch(() => Alert.alert("Couldn't do that", 'Please try again.'));
-  }, []);
 
   // Swipe-up opens the in-app share sheet (deck posts are always public → external allowed).
   const onShare = useCallback((card: DeckCard) => setShareCardState(card), []);
@@ -125,7 +86,6 @@ export function DeckView({ fetchBatch, header, renderEmpty, hasTabBar = true, pe
           onOpenTag={onOpenTag}
           canUndo={canUndo}
           onUndo={undo}
-          onMenu={setMenuCard}
           hideCounts={hideCounts}
         />
         {/* Only surface a real backlog (e.g. offline) — a single in-flight write shouldn't
@@ -156,21 +116,6 @@ export function DeckView({ fetchBatch, header, renderEmpty, hasTabBar = true, pe
           onCountDelta={(delta) => adjustCommentCount(commentsCard.id, delta)}
         />
       ) : null}
-      <ActionMenu visible={!!menuCard} options={cardMenuOptions()} onClose={() => setMenuCard(null)} />
-      <ActionMenu
-        visible={!!muteTag}
-        title={muteTag ? `Mute #${muteTag} for…` : undefined}
-        options={
-          muteTag
-            ? [
-                { label: '30 days', onPress: () => doMute(muteTag, 30) },
-                { label: '90 days', onPress: () => doMute(muteTag, 90) },
-                { label: 'Forever', destructive: true, onPress: () => doMute(muteTag, null) },
-              ]
-            : []
-        }
-        onClose={() => setMuteTag(null)}
-      />
       {shareCardState ? (
         <ShareSheet
           post={{ id: shareCardState.id, caption: shareCardState.caption }}

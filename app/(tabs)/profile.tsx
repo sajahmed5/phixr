@@ -11,7 +11,6 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AccountSwitcher } from '@/components/account-switcher';
 import { HighlightsRail, ProfileLinksRow } from '@/components/profile/showcase-sections';
@@ -41,7 +40,6 @@ type Cell = { id: string; thumbnail_url: string; media_type: 'image' | 'video'; 
 export default function ProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { profile: authProfile, user } = useAuth();
   const handle = authProfile?.handle;
@@ -266,7 +264,7 @@ export default function ProfileScreen() {
         keyExtractor={(c, i) => `${tab}:${c.id}:${i}`}
         numColumns={3}
         columnWrapperStyle={{ gap }}
-        contentContainerStyle={{ gap, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
+        contentContainerStyle={{ gap, paddingBottom: TAB_BAR_CLEARANCE }}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={
           <View style={styles.emptyBox}>

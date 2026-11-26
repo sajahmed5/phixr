@@ -21,11 +21,15 @@ export const BRAND = {
  */
 export const STORY_RING_SEEN = '#8A4A28';
 
-/** Floating (Instagram-style) bottom tab bar geometry. */
-export const TAB_BAR = { height: 60, side: 14, bottom: 4 } as const;
 /**
- * Space the floating tab bar occupies *above* the screen's bottom safe-area inset.
- * Add `insets.bottom + TAB_BAR_CLEARANCE` to a scroll view's paddingBottom (or an
- * over-media overlay) so its content isn't hidden behind the floating bar.
+ * Floating (Instagram-style) bottom tab bar geometry. `bottom` is measured from the
+ * screen's bottom edge, NOT from the safe-area inset: on iPhones the pill sits level with
+ * the home indicator instead of floating a whole inset (34pt) above it.
+ */
+export const TAB_BAR = { height: 60, side: 14, bottom: 8 } as const;
+/**
+ * Space the floating tab bar occupies above the screen's bottom edge, plus a little air.
+ * Use it as-is for a scroll view's paddingBottom (or an over-media overlay) so content
+ * isn't hidden behind the bar. Don't add `insets.bottom`: the bar ignores the inset.
  */
 export const TAB_BAR_CLEARANCE = TAB_BAR.height + TAB_BAR.bottom + 16;
