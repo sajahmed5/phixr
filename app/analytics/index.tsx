@@ -3,6 +3,7 @@ import { Stack, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { BusinessOnly } from '@/components/business-only';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,17 @@ import {
 } from '@/lib/profile';
 
 export default function AnalyticsScreen() {
+  return (
+    <>
+      <Stack.Screen options={{ headerShown: true, title: 'Analytics' }} />
+      <BusinessOnly feature="Analytics">
+        <AnalyticsScreenInner />
+      </BusinessOnly>
+    </>
+  );
+}
+
+function AnalyticsScreenInner() {
   const theme = useTheme();
   const router = useRouter();
   const { user, profile } = useAuth();

@@ -55,8 +55,12 @@ export function ProfileHeader({
           </Pressable>
         ) : (
           <View style={styles.counts}>
-            <Stat label="Posts" value={profile.post_count} />
-            <Stat label="Followers" value={profile.follower_count} onPress={onPressFollowers} />
+            <Stat label={profile.post_count === 1 ? 'Post' : 'Posts'} value={profile.post_count} />
+            <Stat
+              label={profile.follower_count === 1 ? 'Follower' : 'Followers'}
+              value={profile.follower_count}
+              onPress={onPressFollowers}
+            />
             <Stat label="Following" value={profile.following_count} onPress={onPressFollowing} />
           </View>
         )}
@@ -82,9 +86,13 @@ export function ProfileHeader({
         </ThemedText>
         {showPointsHero ? (
           <View style={styles.inlineStats}>
-            <InlineStat value={profile.post_count} label="posts" />
+            <InlineStat value={profile.post_count} label={profile.post_count === 1 ? 'post' : 'posts'} />
             <ThemedText type="small" themeColor="textSecondary">·</ThemedText>
-            <InlineStat value={profile.follower_count} label="followers" onPress={onPressFollowers} />
+            <InlineStat
+              value={profile.follower_count}
+              label={profile.follower_count === 1 ? 'follower' : 'followers'}
+              onPress={onPressFollowers}
+            />
             <ThemedText type="small" themeColor="textSecondary">·</ThemedText>
             <InlineStat value={profile.following_count} label="following" onPress={onPressFollowing} />
           </View>

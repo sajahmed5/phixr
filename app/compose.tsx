@@ -25,6 +25,7 @@ import { TextField } from '@/components/ui/text-field';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
+import { isBusinessProfile } from '@/lib/account-type';
 import { useOnline } from '@/lib/connectivity';
 import { listGroups, type AudienceGroup } from '@/lib/groups';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -34,7 +35,13 @@ import {
   scheduleBusinessDraft,
   type ActingBusiness,
 } from '@/lib/business';
-import { mediaFromPipeline, saveDraft, scheduleDraft, type DraftMedia, type DraftPayload } from '@/lib/drafts';
+import {
+  mediaFromPipeline,
+  saveDraft,
+  scheduleDraft,
+  type DraftMedia,
+  type DraftPayload,
+} from '@/lib/drafts';
 import { looksPromotional } from '@/lib/partnerships';
 import { useUpload } from '@/lib/upload-manager';
 
@@ -48,6 +55,9 @@ export default function ComposeScreen() {
   const { composition, updateDraft, submit, retryUpload, clear, queueOffline } = useUpload();
   const { user, profile } = useAuth();
   const online = useOnline();
+  // Personal accounts: post, nothing else. Drafts, scheduling and paid-partnership
+  // labels are business tools (team members acting for a business keep drafts).
+  const isBusiness = isBusinessProfile(profile);
   const [groups, setGroups] = useState<AudienceGroup[] | null>(null);
   const [defaultApplied, setDefaultApplied] = useState(false);
   const [promoNudge, setPromoNudge] = useState(false);
@@ -63,7 +73,9 @@ export default function ComposeScreen() {
   const [bizOptions, setBizOptions] = useState<ActingBusiness[]>([]);
   const [actingBiz, setActingBiz] = useState<ActingBusiness | null>(null);
   useEffect(() => {
-    void myActingBusinesses(['admin', 'editor']).then(setBizOptions).catch(() => {});
+    void myActingBusinesses(['admin', 'editor'])
+      .then(setBizOptions)
+      .catch(() => {});
   }, []);
 
   const buildPayload = useCallback((): DraftPayload | null => {
@@ -89,12 +101,14 @@ export default function ComposeScreen() {
   // acting as a business (the draft belongs to the business, not to me).
   useEffect(() => {
     const payload = buildPayload();
-    if (!payload || actingBiz || composition?.posting || composition?.postedId) return;
+    // Drafts are a business tool; personal accounts don't autosave to the server.
+    if (!payload || !isBusiness || actingBiz || composition?.posting || composition?.postedId)
+      return;
     const t = setTimeout(() => {
       saveDraft('post', payload, { autosave: true }).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
-  }, [buildPayload, actingBiz, composition?.posting, composition?.postedId]);
+  }, [buildPayload, isBusiness, actingBiz, composition?.posting, composition?.postedId]);
 
   const worstMediaStatus = (media: DraftMedia[]): string => {
     const order = ['approved', 'pending', 'flagged', 'removed'];
@@ -302,20 +316,27 @@ export default function ComposeScreen() {
             {extras.length > 0 ? (
               <View style={styles.countPill}>
                 <Ionicons name="copy" size={12} color="#fff" />
-                <ThemedText type="small" style={styles.retakeText}>{extras.length + 1}</ThemedText>
+                <ThemedText type="small" style={styles.retakeText}>
+                  {extras.length + 1}
+                </ThemedText>
               </View>
             ) : null}
           </View>
 
           {/* Carousel strip: the cover + every extra, in posting order. */}
           {extras.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.strip}>
               {[media, ...extras].map((m, i) => (
                 <View key={`${m.uri}-${i}`}>
                   <Image source={{ uri: m.uri }} style={styles.stripThumb} contentFit="cover" />
                   {i === 0 ? (
                     <View style={styles.stripBadge}>
-                      <ThemedText type="small" style={styles.retakeText}>Cover</ThemedText>
+                      <ThemedText type="small" style={styles.retakeText}>
+                        Cover
+                      </ThemedText>
                     </View>
                   ) : null}
                 </View>
@@ -479,13 +500,13 @@ export default function ComposeScreen() {
 
           {/* Paid partnership (brief 9A/9C) — adults only; the label is permanent
               once posted (ASA disclosure), and the brand approves being named. */}
-          {profile?.age_band !== 'minor' ? (
+          {isBusiness && profile?.age_band !== 'minor' ? (
             <View>
               <ThemedText type="smallBold">Paid partnership</ThemedText>
               {promoNudge && !draft.partnerBrand ? (
                 <FormMessage tone="error">
-                  This looks promotional. If a brand paid you or gifted this, UK
-                  advertising rules say it must be labelled — add the brand below.
+                  This looks promotional. If a brand paid you or gifted this, UK advertising rules
+                  say it must be labelled — add the brand below.
                 </FormMessage>
               ) : null}
               <TextField
@@ -497,8 +518,8 @@ export default function ComposeScreen() {
                 onChangeText={(t) => updateDraft({ partnerBrand: t || null })}
               />
               <ThemedText type="small" themeColor="textSecondary">
-                Adds a permanent “Paid partnership” label to this post. The brand
-                (a Phixr business account) is asked to approve being named.
+                Adds a permanent “Paid partnership” label to this post. The brand (a Phixr business
+                account) is asked to approve being named.
               </ThemedText>
             </View>
           ) : null}
@@ -526,10 +547,7 @@ export default function ComposeScreen() {
                     key={b?.business_id ?? 'me'}
                     accessibilityRole="button"
                     onPress={() => setActingBiz(b)}
-                    style={[
-                      styles.postAsChip,
-                      { borderColor: on ? BRAND.accent : theme.border },
-                    ]}>
+                    style={[styles.postAsChip, { borderColor: on ? BRAND.accent : theme.border }]}>
                     <ThemedText type="small">
                       {b ? `@${b.profiles?.handle ?? 'business'}` : 'Me'}
                     </ThemedText>
@@ -545,29 +563,33 @@ export default function ComposeScreen() {
           ) : (
             <Button
               title={
-                offlineMode ? 'Post when back online' : phase === 'uploading' ? 'Post when ready' : 'Post'
+                offlineMode
+                  ? 'Post when back online'
+                  : phase === 'uploading'
+                    ? 'Post when ready'
+                    : 'Post'
               }
               onPress={onPost}
               disabled={!canPost}
               loading={composition.posting}
             />
           )}
-          <View style={styles.draftRow}>
-            <Button
-              title="Save draft"
-              variant="secondary"
-              onPress={onSaveDraft}
-              disabled={
-                savingDraft || (offlineMode ? !!actingBiz : phase !== 'ready')
-              }
-            />
-            <Button
-              title="Schedule…"
-              variant="secondary"
-              onPress={() => setPickerOpen(true)}
-              disabled={!canPost || phase !== 'ready' || savingDraft}
-            />
-          </View>
+          {isBusiness || actingBiz ? (
+            <View style={styles.draftRow}>
+              <Button
+                title="Save draft"
+                variant="secondary"
+                onPress={onSaveDraft}
+                disabled={savingDraft || (offlineMode ? !!actingBiz : phase !== 'ready')}
+              />
+              <Button
+                title="Schedule…"
+                variant="secondary"
+                onPress={() => setPickerOpen(true)}
+                disabled={!canPost || phase !== 'ready' || savingDraft}
+              />
+            </View>
+          ) : null}
           {pickerOpen ? (
             <View>
               <DateTimePicker
@@ -579,7 +601,11 @@ export default function ComposeScreen() {
                 }}
               />
               <View style={styles.draftRow}>
-                <Button title="Confirm schedule" onPress={() => void onSchedule(when)} disabled={savingDraft} />
+                <Button
+                  title="Confirm schedule"
+                  onPress={() => void onSchedule(when)}
+                  disabled={savingDraft}
+                />
                 <Button title="Cancel" variant="secondary" onPress={() => setPickerOpen(false)} />
               </View>
             </View>
@@ -713,22 +739,45 @@ function VideoPreview({ uri }: { uri: string }) {
     p.loop = true;
     p.muted = false;
   });
-  return (
-    <VideoView player={player} style={styles.preview} contentFit="contain" nativeControls />
-  );
+  return <VideoView player={player} style={styles.preview} contentFit="contain" nativeControls />;
 }
 
 const styles = StyleSheet.create({
   draftRow: { flexDirection: 'row', gap: 10, justifyContent: 'center', marginTop: 8 },
-  postAsRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  postAsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
   postAsChip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
   fill: { flex: 1 },
   content: { padding: 16, gap: 18 },
   previewWrap: { borderRadius: 16, overflow: 'hidden' },
-  countPill: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  countPill: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
   strip: { flexDirection: 'row', gap: 8, paddingVertical: 10 },
   stripThumb: { width: 64, height: 64, borderRadius: 10, backgroundColor: '#000' },
-  stripBadge: { position: 'absolute', bottom: 4, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.65)', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 },
+  stripBadge: {
+    position: 'absolute',
+    bottom: 4,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
   preview: { width: '100%', aspectRatio: 4 / 5, backgroundColor: '#000' },
   retake: {
     position: 'absolute',

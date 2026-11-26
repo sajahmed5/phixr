@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/ui/text-field';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { isBusinessProfile } from '@/lib/account-type';
 import { useAuth } from '@/lib/auth-context';
 import { getPartnershipLabels } from '@/lib/partnerships';
 import {
@@ -42,7 +43,8 @@ const COMMENT_PREVIEW = 2;
 export default function PostViewScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isBusiness = isBusinessProfile(profile);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width: winW } = useWindowDimensions();
   const pageW = winW - 32; // styles.content horizontal padding
@@ -451,7 +453,8 @@ export default function PostViewScreen() {
             Part 12D: accepted co-authors share the full analytics too. */}
         {isOwnPost || myCollab?.status === 'accepted' ? (
           <>
-            <PostAnalyticsCard postId={post.id} />
+            {/* Analytics and boosting are business tools. */}
+            {isBusiness ? <PostAnalyticsCard postId={post.id} /> : null}
             {/* Likers list (Part 4B): only the owner has this door —
                 co-authors get aggregates, never the named list. */}
             {isOwnPost ? (
@@ -463,7 +466,7 @@ export default function PostViewScreen() {
             ) : null}
             {/* Boost (Part 5B): public approved posts only; the server enforces.
                 Owner only — co-authors can't spend on it. */}
-            {isOwnPost && post.visibility === 'public' ? (
+            {isBusiness && isOwnPost && post.visibility === 'public' ? (
               <Button
                 title="Boost this post"
                 variant="secondary"
@@ -619,10 +622,9 @@ export default function PostViewScreen() {
               }
             },
           },
-          {
-            label: 'Invite co-author…',
-            onPress: () => setCollabInviteOpen(true),
-          },
+          ...(isBusiness
+            ? [{ label: 'Invite co-author…', onPress: () => setCollabInviteOpen(true) }]
+            : []),
           {
             label: 'Download post',
             onPress: async () => {

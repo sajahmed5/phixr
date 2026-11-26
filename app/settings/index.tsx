@@ -21,6 +21,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { getAdsConsent, setAdsConsent } from '@/lib/ads';
 import { analytics } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth-context';
+import { isBusinessProfile } from '@/lib/account-type';
 import { confirm } from '@/lib/confirm';
 import { isSimulatingOffline, setSimulatedOffline } from '@/lib/connectivity';
 import {
@@ -44,6 +45,7 @@ export default function SettingsScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { profile, reload, signOut, signOutAll } = useAuth();
+  const isBusiness = isBusinessProfile(profile);
 
   const [isPrivate, setIsPrivate] = useState(profile?.is_private ?? false);
   const [simOffline, setSimOffline] = useState(isSimulatingOffline());
@@ -263,16 +265,20 @@ export default function SettingsScreen() {
               <TriRow label="New followers" value={prefs.follows} onChange={(v) => void setPrefMode('follows', v)} />
               <TriRow label="Follow requests" value={prefs.requests} onChange={(v) => void setPrefMode('requests', v)} />
               <TriRow label="Messages" value={prefs.messages} onChange={(v) => void setPrefMode('messages', v)} />
-              <TriRow label="Boosts & reach" value={prefs.reach} onChange={(v) => void setPrefMode('reach', v)} noFollows />
-              <TriRow label="Posting & collabs" value={prefs.posts} onChange={(v) => void setPrefMode('posts', v)} noFollows />
-              <TriRow label="Earnings, offers & team" value={prefs.business} onChange={(v) => void setPrefMode('business', v)} noFollows />
-              <TriRow
-                label="Weekly creator digest"
-                sublabel="A Monday summary of your week"
-                value={prefs.digest}
-                onChange={(v) => void setPrefMode('digest', v)}
-                noFollows
-              />
+              {isBusiness ? (
+                <>
+                  <TriRow label="Boosts & reach" value={prefs.reach} onChange={(v) => void setPrefMode('reach', v)} noFollows />
+                  <TriRow label="Posting & collabs" value={prefs.posts} onChange={(v) => void setPrefMode('posts', v)} noFollows />
+                  <TriRow label="Earnings, offers & team" value={prefs.business} onChange={(v) => void setPrefMode('business', v)} noFollows />
+                  <TriRow
+                    label="Weekly creator digest"
+                    sublabel="A Monday summary of your week"
+                    value={prefs.digest}
+                    onChange={(v) => void setPrefMode('digest', v)}
+                    noFollows
+                  />
+                </>
+              ) : null}
             </>
           )}
         </Group>
@@ -345,24 +351,31 @@ export default function SettingsScreen() {
         </Group>
 
         <Group title="Account">
+          {isBusiness ? (
+            <LinkRow
+              icon="grid-outline"
+              label="Business tools"
+              onPress={() => router.push('/business-tools')}
+            />
+          ) : null}
           <LinkRow
-            icon="construct-outline"
-            label="Creator tools"
+            icon={isBusiness ? 'construct-outline' : 'chatbubble-ellipses-outline'}
+            label={isBusiness ? 'Profile tools' : 'Comment controls'}
             onPress={() => router.push('/settings/creator-tools')}
           />
           <LinkRow
             icon="briefcase-outline"
-            label="Business account"
+            label={isBusiness ? 'Business account' : 'Switch to a business account'}
             onPress={() => router.push('/settings/business')}
           />
-          {(profile as { account_type?: string } | null)?.account_type === 'business' ? (
+          {isBusiness ? (
             <LinkRow
               icon="ribbon-outline"
               label="Partnership requests"
               onPress={() => router.push('/settings/partnerships')}
             />
           ) : null}
-          {profile?.age_band !== 'minor' ? (
+          {isBusiness && profile?.age_band !== 'minor' ? (
             <LinkRow
               icon="cash-outline"
               label="Earnings"

@@ -8,21 +8,36 @@ import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/ui/text-field';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { isBusinessProfile } from '@/lib/account-type';
 import { useAuth } from '@/lib/auth-context';
 import {
-  addHiddenWord, addProfileLink, deleteQuickReply, getHiddenWords, getProfileLinks,
-  getQuickReplies, removeHiddenWord, removeProfileLink, saveQuickReply, setCommentLimit,
-  setProfileCategory, setUseDefaultHiddenWords,
-  type ProfileLink, type QuickReply,
+  addHiddenWord,
+  addProfileLink,
+  deleteQuickReply,
+  getHiddenWords,
+  getProfileLinks,
+  getQuickReplies,
+  removeHiddenWord,
+  removeProfileLink,
+  saveQuickReply,
+  setCommentLimit,
+  setProfileCategory,
+  setUseDefaultHiddenWords,
+  type ProfileLink,
+  type QuickReply,
 } from '@/lib/showcase';
 
 /**
  * Part 12C/12E creator tools, one-handed: link in bio (with tap counts),
  * profile category, hidden words, comment limits and quick replies.
+ * Personal accounts see only the comment safety controls ("Comment controls").
  */
 export default function CreatorToolsScreen() {
   const theme = useTheme();
   const { user, profile, reload } = useAuth();
+  // Personal accounts get the safety controls (hidden words, comment limits); bio links,
+  // category and quick replies are business tools.
+  const isBusiness = isBusinessProfile(profile);
 
   // Links
   const [links, setLinks] = useState<ProfileLink[]>([]);
@@ -49,9 +64,15 @@ export default function CreatorToolsScreen() {
 
   useEffect(() => {
     if (!user?.id) return;
-    void getProfileLinks(user.id).then(setLinks).catch(() => {});
-    void getHiddenWords().then(setWords).catch(() => {});
-    void getQuickReplies().then(setReplies).catch(() => {});
+    void getProfileLinks(user.id)
+      .then(setLinks)
+      .catch(() => {});
+    void getHiddenWords()
+      .then(setWords)
+      .catch(() => {});
+    void getQuickReplies()
+      .then(setReplies)
+      .catch(() => {});
   }, [user?.id]);
 
   const onError = (e: unknown) =>
@@ -59,88 +80,113 @@ export default function CreatorToolsScreen() {
 
   return (
     <ThemedView style={styles.fill}>
-      <Stack.Screen options={{ headerShown: true, title: 'Creator tools' }} />
+      <Stack.Screen
+        options={{ headerShown: true, title: isBusiness ? 'Profile tools' : 'Comment controls' }}
+      />
       <ScrollView contentContainerStyle={styles.body}>
-        {/* --- Category --- */}
-        <ThemedText type="subtitle">Profile category</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          Shown under your name — e.g. “Food creator” or “Pizza restaurant”.
-        </ThemedText>
-        <TextField label="" placeholder="e.g. Food creator" value={category} onChangeText={setCategory} maxLength={40} />
-        <Button
-          title="Save category"
-          variant="secondary"
-          onPress={() =>
-            setProfileCategory(category || null)
-              .then(reload)
-              .catch(onError)
-          }
-        />
-
-        {/* --- Link in bio --- */}
-        <ThemedText type="subtitle" style={styles.sectionTop}>Links</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          Up to 5 links on your profile. Taps are counted (totals only).
-        </ThemedText>
-        {links.map((l) => (
-          <View key={l.id} style={[styles.row, { borderColor: theme.border }]}>
-            <View style={styles.rowBody}>
-              <ThemedText type="smallBold" numberOfLines={1}>{l.title}</ThemedText>
-              <ThemedText
-                type="small"
-                themeColor="textSecondary"
-                numberOfLines={1}
-                onPress={() => void Linking.openURL(l.url)}>
-                {l.url}
-              </ThemedText>
-            </View>
-            <ThemedText type="small" themeColor="textSecondary">{l.tap_count} taps</ThemedText>
-            <ThemedText
-              type="small"
-              style={{ color: BRAND.accent }}
-              onPress={() =>
-                removeProfileLink(l.id)
-                  .then(() => setLinks(links.filter((x) => x.id !== l.id)))
-                  .catch(onError)
-              }>
-              Remove
-            </ThemedText>
-          </View>
-        ))}
-        {links.length < 5 ? (
+        {isBusiness ? (
           <>
-            <TextField label="" placeholder="Title" value={linkTitle} onChangeText={setLinkTitle} maxLength={40} />
+            {/* --- Category --- */}
+            <ThemedText type="subtitle">Profile category</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Shown under your name — e.g. “Food creator” or “Pizza restaurant”.
+            </ThemedText>
             <TextField
               label=""
-              placeholder="https://"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              value={linkUrl}
-              onChangeText={setLinkUrl}
+              placeholder="e.g. Food creator"
+              value={category}
+              onChangeText={setCategory}
+              maxLength={40}
             />
             <Button
-              title="Add link"
+              title="Save category"
               variant="secondary"
-              disabled={!linkTitle.trim() || !linkUrl.trim()}
               onPress={() =>
-                addProfileLink(linkTitle, linkUrl)
-                  .then(async () => {
-                    setLinkTitle('');
-                    setLinkUrl('');
-                    if (user?.id) setLinks(await getProfileLinks(user.id));
-                  })
+                setProfileCategory(category || null)
+                  .then(reload)
                   .catch(onError)
               }
             />
+
+            {/* --- Link in bio --- */}
+            <ThemedText type="subtitle" style={styles.sectionTop}>
+              Links
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Up to 5 links on your profile. Taps are counted (totals only).
+            </ThemedText>
+            {links.map((l) => (
+              <View key={l.id} style={[styles.row, { borderColor: theme.border }]}>
+                <View style={styles.rowBody}>
+                  <ThemedText type="smallBold" numberOfLines={1}>
+                    {l.title}
+                  </ThemedText>
+                  <ThemedText
+                    type="small"
+                    themeColor="textSecondary"
+                    numberOfLines={1}
+                    onPress={() => void Linking.openURL(l.url)}>
+                    {l.url}
+                  </ThemedText>
+                </View>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {l.tap_count} taps
+                </ThemedText>
+                <ThemedText
+                  type="small"
+                  style={{ color: BRAND.accent }}
+                  onPress={() =>
+                    removeProfileLink(l.id)
+                      .then(() => setLinks(links.filter((x) => x.id !== l.id)))
+                      .catch(onError)
+                  }>
+                  Remove
+                </ThemedText>
+              </View>
+            ))}
+            {links.length < 5 ? (
+              <>
+                <TextField
+                  label=""
+                  placeholder="Title"
+                  value={linkTitle}
+                  onChangeText={setLinkTitle}
+                  maxLength={40}
+                />
+                <TextField
+                  label=""
+                  placeholder="https://"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  value={linkUrl}
+                  onChangeText={setLinkUrl}
+                />
+                <Button
+                  title="Add link"
+                  variant="secondary"
+                  disabled={!linkTitle.trim() || !linkUrl.trim()}
+                  onPress={() =>
+                    addProfileLink(linkTitle, linkUrl)
+                      .then(async () => {
+                        setLinkTitle('');
+                        setLinkUrl('');
+                        if (user?.id) setLinks(await getProfileLinks(user.id));
+                      })
+                      .catch(onError)
+                  }
+                />
+              </>
+            ) : null}
           </>
         ) : null}
-
         {/* --- Hidden words --- */}
-        <ThemedText type="subtitle" style={styles.sectionTop}>Hidden words</ThemedText>
+        <ThemedText type="subtitle" style={styles.sectionTop}>
+          Hidden words
+        </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Comments on your posts containing these are hidden automatically (only you and
-          the writer can see them). The built-in list of offensive terms is on by default.
+          Comments on your posts containing these are hidden automatically (only you and the writer
+          can see them). The built-in list of offensive terms is on by default.
         </ThemedText>
         <View style={styles.toggleRow}>
           <ThemedText type="small">Use the built-in list</ThemedText>
@@ -161,11 +207,17 @@ export default function CreatorToolsScreen() {
               onPress={() =>
                 removeHiddenWord(w).then(() => setWords(words.filter((x) => x !== w)))
               }>
-              {w}  ✕
+              {w} ✕
             </ThemedText>
           ))}
         </View>
-        <TextField label="" placeholder="Add a word or phrase" value={newWord} onChangeText={setNewWord} maxLength={60} />
+        <TextField
+          label=""
+          placeholder="Add a word or phrase"
+          value={newWord}
+          onChangeText={setNewWord}
+          maxLength={60}
+        />
         <Button
           title="Add hidden word"
           variant="secondary"
@@ -181,15 +233,19 @@ export default function CreatorToolsScreen() {
         />
 
         {/* --- Comment limits --- */}
-        <ThemedText type="subtitle" style={styles.sectionTop}>Limit comments</ThemedText>
+        <ThemedText type="subtitle" style={styles.sectionTop}>
+          Limit comments
+        </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           Temporarily restrict who can comment on your posts — useful during a pile-on.
         </ThemedText>
-        {([
-          [null, 'Everyone'],
-          ['followers', 'Followers only'],
-          ['week_followers', 'People following you for over a week'],
-        ] as const).map(([value, label]) => (
+        {(
+          [
+            [null, 'Everyone'],
+            ['followers', 'Followers only'],
+            ['week_followers', 'People following you for over a week'],
+          ] as const
+        ).map(([value, label]) => (
           <View key={label} style={styles.toggleRow}>
             <ThemedText type="small">{label}</ThemedText>
             <Switch
@@ -202,44 +258,68 @@ export default function CreatorToolsScreen() {
           </View>
         ))}
 
-        {/* --- Quick replies --- */}
-        <ThemedText type="subtitle" style={styles.sectionTop}>Quick replies</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          Saved answers you can insert in DMs and comment replies. Pasted quick replies
-          earn little or no points — that&apos;s by design.
-        </ThemedText>
-        {replies.map((r) => (
-          <View key={r.id} style={[styles.row, { borderColor: theme.border }]}>
-            <View style={styles.rowBody}>
-              <ThemedText type="smallBold">/{r.shortcut}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>{r.body}</ThemedText>
-            </View>
-            <ThemedText
-              type="small"
-              style={{ color: BRAND.accent }}
-              onPress={() =>
-                deleteQuickReply(r.id).then(() => setReplies(replies.filter((x) => x.id !== r.id)))
-              }>
-              Delete
+        {isBusiness ? (
+          <>
+            {/* --- Quick replies --- */}
+            <ThemedText type="subtitle" style={styles.sectionTop}>
+              Quick replies
             </ThemedText>
-          </View>
-        ))}
-        <TextField label="" placeholder="Shortcut (e.g. hours)" autoCapitalize="none" value={qrShortcut} onChangeText={setQrShortcut} maxLength={20} />
-        <TextField label="" placeholder="Reply text" multiline value={qrBody} onChangeText={setQrBody} maxLength={500} />
-        <Button
-          title="Save quick reply"
-          variant="secondary"
-          disabled={!qrShortcut.trim() || !qrBody.trim()}
-          onPress={() =>
-            saveQuickReply(qrShortcut, qrBody)
-              .then(async () => {
-                setQrShortcut('');
-                setQrBody('');
-                setReplies(await getQuickReplies());
-              })
-              .catch(onError)
-          }
-        />
+            <ThemedText type="small" themeColor="textSecondary">
+              Saved answers you can insert in DMs and comment replies. Pasted quick replies earn
+              little or no points — that&apos;s by design.
+            </ThemedText>
+            {replies.map((r) => (
+              <View key={r.id} style={[styles.row, { borderColor: theme.border }]}>
+                <View style={styles.rowBody}>
+                  <ThemedText type="smallBold">/{r.shortcut}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
+                    {r.body}
+                  </ThemedText>
+                </View>
+                <ThemedText
+                  type="small"
+                  style={{ color: BRAND.accent }}
+                  onPress={() =>
+                    deleteQuickReply(r.id).then(() =>
+                      setReplies(replies.filter((x) => x.id !== r.id)),
+                    )
+                  }>
+                  Delete
+                </ThemedText>
+              </View>
+            ))}
+            <TextField
+              label=""
+              placeholder="Shortcut (e.g. hours)"
+              autoCapitalize="none"
+              value={qrShortcut}
+              onChangeText={setQrShortcut}
+              maxLength={20}
+            />
+            <TextField
+              label=""
+              placeholder="Reply text"
+              multiline
+              value={qrBody}
+              onChangeText={setQrBody}
+              maxLength={500}
+            />
+            <Button
+              title="Save quick reply"
+              variant="secondary"
+              disabled={!qrShortcut.trim() || !qrBody.trim()}
+              onPress={() =>
+                saveQuickReply(qrShortcut, qrBody)
+                  .then(async () => {
+                    setQrShortcut('');
+                    setQrBody('');
+                    setReplies(await getQuickReplies());
+                  })
+                  .catch(onError)
+              }
+            />
+          </>
+        ) : null}
       </ScrollView>
     </ThemedView>
   );
@@ -249,9 +329,20 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   body: { padding: 16, gap: 10, paddingBottom: 48 },
   sectionTop: { marginTop: 22 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: 8 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 8,
+  },
   rowBody: { flex: 1, gap: 2 },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+  },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 },
 });

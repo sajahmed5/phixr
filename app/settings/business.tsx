@@ -62,7 +62,14 @@ export default function BusinessSettingsScreen() {
   const toggleType = async () => {
     if (busy) return;
     if (isBusiness) {
-      if (!(await confirm('Back to personal?', 'Your venue claims will be released.', 'Switch'))) return;
+      if (
+        !(await confirm(
+          'Switch back to personal?',
+          'Business tools (analytics, scheduling, boosts, earnings, bio links) will be hidden and your venue claims released. Boosts and scheduled posts already set up will still finish. You can switch back any time.',
+          'Switch',
+        ))
+      )
+        return;
     }
     setBusy(true);
     try {
@@ -143,11 +150,41 @@ export default function BusinessSettingsScreen() {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.header}>
-            <ThemedText type="small" themeColor="textSecondary">
-              A business account links your profile to your venue — or every branch if
-              you&apos;re a chain. Your posts automatically attach to your venue, show in local
-              search with your place name, and appear as pins on the map.
-            </ThemedText>
+            <View style={[styles.typeCard, { borderColor: theme.border }]}>
+              <ThemedText type="smallBold">
+                {isBusiness ? 'You have a business account' : 'You have a personal account'}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {isBusiness
+                  ? 'You get every creator and business tool. Find them all under Business tools on your profile.'
+                  : 'Personal accounts are for friends and scrolling: post, swipe, follow and message.'}
+              </ThemedText>
+            </View>
+            {!isBusiness ? (
+              <View style={styles.perks}>
+                <ThemedText type="smallBold">A business account adds</ThemedText>
+                {(
+                  [
+                    ['bar-chart-outline', 'Analytics for your posts and audience'],
+                    ['calendar-outline', 'Drafts and scheduled posts'],
+                    ['rocket-outline', 'Boosts to promote your posts'],
+                    ['cash-outline', 'Earnings, payouts and paid partnerships'],
+                    ['link-outline', 'Bio links and a profile category'],
+                    ['storefront-outline', 'Your venue, hours, offers and a team'],
+                  ] as const
+                ).map(([icon, text]) => (
+                  <View key={text} style={styles.perk}>
+                    <Ionicons name={icon} size={18} color={BRAND.accent} />
+                    <ThemedText type="small" style={styles.perkText}>
+                      {text}
+                    </ThemedText>
+                  </View>
+                ))}
+                <ThemedText type="small" themeColor="textSecondary">
+                  For over-18s. You can switch back to personal at any time.
+                </ThemedText>
+              </View>
+            ) : null}
             <Button
               title={
                 busy ? 'Switching…' : isBusiness ? 'Switch back to personal' : 'Switch to business account'
@@ -291,6 +328,10 @@ export default function BusinessSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  typeCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 14, gap: 4 },
+  perks: { gap: 10 },
+  perk: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  perkText: { flex: 1 },
   fill: { flex: 1 },
   content: { padding: 20, gap: 10 },
   header: { gap: 12, marginBottom: 6 },

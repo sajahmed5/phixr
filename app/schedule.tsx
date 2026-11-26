@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { BusinessOnly } from '@/components/business-only';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,17 @@ import { getCreatorOverview } from '@/lib/profile';
  * Best-time banner comes from the Part 3 audience hour histogram.
  */
 export default function ScheduleScreen() {
+  return (
+    <>
+      <Stack.Screen options={{ headerShown: true, title: 'Content calendar' }} />
+      <BusinessOnly feature="Scheduled posts">
+        <ScheduleScreenInner />
+      </BusinessOnly>
+    </>
+  );
+}
+
+function ScheduleScreenInner() {
   const theme = useTheme();
   const [rows, setRows] = useState<Draft[] | null>(null);
   const [day, setDay] = useState(() => startOfDay(new Date()));
