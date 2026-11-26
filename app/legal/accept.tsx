@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ReportFab } from '@/components/report-issue';
@@ -18,6 +19,7 @@ import { useAuth } from '@/lib/auth-context';
  */
 export default function AcceptTermsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { reload } = useAuth();
   const [busy, setBusy] = useState(false);
 
@@ -38,12 +40,12 @@ export default function AcceptTermsScreen() {
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
       <View style={styles.content}>
         <Ionicons name="document-text-outline" size={48} color={BRAND.accent} />
-        <ThemedText type="title" style={styles.center}>
+        <ThemedText type="subtitle" style={styles.center}>
           We&apos;ve updated our terms
         </ThemedText>
         <ThemedText type="default" themeColor="textSecondary" style={styles.center}>
-          Our Terms of Service and Privacy Policy have changed. Please review and accept
-          them to keep using Phixr.
+          We&apos;ve updated our Terms of Service, Privacy Policy and the other documents
+          that explain how Phixr works. Please review them and accept to keep using Phixr.
         </ThemedText>
         <View style={styles.links}>
           <Pressable onPress={() => router.push('/legal/terms')}>
@@ -57,8 +59,13 @@ export default function AcceptTermsScreen() {
             </ThemedText>
           </Pressable>
         </View>
+        <Pressable onPress={() => router.push('/legal')}>
+          <ThemedText type="small" themeColor="textSecondary">
+            See all legal documents
+          </ThemedText>
+        </Pressable>
       </View>
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <Button title="I accept" onPress={accept} loading={busy} />
       </View>
       {/* This route is presented as a modal, which iOS puts in its own container —
@@ -73,5 +80,5 @@ const styles = StyleSheet.create({
   content: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32 },
   center: { textAlign: 'center' },
   links: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  footer: { padding: 24 },
+  footer: { paddingHorizontal: 24, paddingTop: 12 },
 });

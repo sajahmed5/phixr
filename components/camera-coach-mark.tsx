@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { usePathname } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,9 +13,26 @@ import { dismissCameraCoach, isCameraCoachArmed, onCameraCoachChange } from '@/l
  * their first post. Armed when the first-run tutorial finishes; dismissed on tap or once
  * a post is created. Rendered app-wide (next to the tab bar) but only visible while armed.
  */
+// Tabs that show the camera button this points at — but not the swipe deck (Home),
+// where the bubble would sit on top of the card's name, caption and tags, nor Messages,
+// where it would collide with the New message button.
+const TAB_PATHS = new Set(['/following', '/profile']);
+
+// A nudge, not a permanent overlay: shown for a few seconds once per app launch (until
+// the user posts or taps it, which retires it for good).
+const SHOW_FOR_MS = 6000;
+let shownThisLaunch = false;
+
 export function CameraCoachMark() {
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
   const [visible, setVisible] = useState(false);
+  const [expired, setExpired] = useState(shownThisLaunch);
+
+  // Opening the camera is exactly what the hint asks for — job done.
+  useEffect(() => {
+    if (visible && pathname === '/camera') void dismissCameraCoach();
+  }, [pathname, visible]);
 
   useEffect(() => {
     let active = true;
@@ -31,7 +49,15 @@ export function CameraCoachMark() {
     };
   }, []);
 
-  if (!visible) return null;
+  const onTab = TAB_PATHS.has(pathname);
+  useEffect(() => {
+    if (!visible || !onTab || expired) return;
+    shownThisLaunch = true;
+    const t = setTimeout(() => setExpired(true), SHOW_FOR_MS);
+    return () => clearTimeout(t);
+  }, [visible, onTab, expired]);
+
+  if (!visible || !onTab || expired) return null;
 
   return (
     <View

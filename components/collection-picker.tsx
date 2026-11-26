@@ -3,7 +3,10 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { ReportFab } from '@/components/report-issue';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { ThemedText } from '@/components/themed-text';
+import { useKeyboardHeight } from '@/lib/use-keyboard-height';
 import { useTheme } from '@/hooks/use-theme';
 import {
   createCollection,
@@ -31,6 +34,8 @@ export function CollectionPicker({
   onChange?: (saved: boolean) => void;
 }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardHeight();
   const [collections, setCollections] = useState<Collection[] | null>(null);
   const [saved, setSaved] = useState(false);
   const [current, setCurrent] = useState<string | null>(null);
@@ -108,13 +113,22 @@ export function CollectionPicker({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
-      <View style={[styles.sheet, { backgroundColor: theme.background }]}>
+      <View
+        style={[
+          styles.sheet,
+          {
+            backgroundColor: theme.background,
+            // Sit on top of the keyboard while naming a new collection.
+            bottom: keyboard,
+            paddingBottom: keyboard > 0 ? 12 : insets.bottom + 16,
+          },
+        ]}>
         <View style={styles.handle} />
         <View style={styles.header}>
           <ThemedText type="subtitle">Save to</ThemedText>
           {saved ? (
             <Pressable onPress={remove} hitSlop={8} accessibilityRole="button" accessibilityLabel="Remove from saved">
-              <ThemedText type="smallBold" style={{ color: '#E0563B' }}>Remove</ThemedText>
+              <ThemedText type="smallBold" style={{ color: theme.danger }}>Remove</ThemedText>
             </Pressable>
           ) : null}
         </View>
@@ -209,7 +223,7 @@ function Row({
 
 const styles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 32, paddingHorizontal: 16 },
+  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 16 },
   handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.4)', marginTop: 8, marginBottom: 8 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
   center: { paddingVertical: 40, alignItems: 'center' },

@@ -45,6 +45,25 @@ export function DeckExhausted({ onRefresh }: { onRefresh: () => void }) {
 }
 
 /** Network/query error with a retry that preserves any queued swipes. */
+/** Ran out of saved posts with no signal. Not an error: it reloads by itself when the
+ *  connection returns; the button is only there for impatient thumbs. */
+export function DeckOffline({ onRetry }: { onRetry: () => void }) {
+  const theme = useTheme();
+  return (
+    <View style={styles.centered}>
+      <Ionicons name="cloud-offline-outline" size={44} color={theme.textSecondary} />
+      <ThemedText type="subtitle" style={styles.centerText}>
+        You&apos;re offline
+      </ThemedText>
+      <ThemedText type="default" themeColor="textSecondary" style={styles.centerText}>
+        You&apos;ve seen everything saved on your phone. New posts will load by themselves
+        when you&apos;re back online — and your swipes, posts and messages will send then too.
+      </ThemedText>
+      <Button title="Try again" variant="secondary" onPress={onRetry} />
+    </View>
+  );
+}
+
 export function DeckError({ onRetry }: { onRetry: () => void }) {
   const theme = useTheme();
   return (

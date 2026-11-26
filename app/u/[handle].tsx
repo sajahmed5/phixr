@@ -134,6 +134,7 @@ export default function PublicProfileScreen() {
   if (status === 'loading') {
     return (
       <ThemedView style={styles.center}>
+        <Stack.Screen options={{ headerShown: true, title: '' }} />
         <ActivityIndicator color={theme.textSecondary} />
       </ThemedView>
     );

@@ -27,9 +27,11 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
 
   return (
     <View style={styles.container}>
-      <ThemedText type="smallBold" style={styles.label}>
-        {label}
-      </ThemedText>
+      {label ? (
+        <ThemedText type="smallBold" style={styles.label}>
+          {label}
+        </ThemedText>
+      ) : null}
       <View style={[styles.inputRow, { borderColor, backgroundColor: theme.background }]}>
         <TextInput
           ref={ref}

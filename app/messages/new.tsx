@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BRAND } from '@/constants/config';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
@@ -85,7 +86,7 @@ export default function NewMessageScreen() {
     <ThemedView style={{ flex: 1, paddingTop: insets.top }}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={10}><Ionicons name="chevron-back" size={26} color={theme.text} /></Pressable>
-        <ThemedText type="subtitle" style={{ flex: 1 }}>{mode === 'group' ? 'New group' : 'New message'}</ThemedText>
+        <ThemedText type="smallBold" style={{ flex: 1, fontSize: 17 }}>{mode === 'group' ? 'New group' : 'New message'}</ThemedText>
         <Pressable onPress={() => setMode((m) => (m === 'direct' ? 'group' : 'direct'))} hitSlop={8}>
           <ThemedText type="small" style={{ color: theme.tint, fontWeight: '700' }}>{mode === 'direct' ? 'New group' : 'Direct'}</ThemedText>
         </Pressable>
@@ -159,7 +160,7 @@ export default function NewMessageScreen() {
       )}
 
       {mode === 'group' ? (
-        <Pressable onPress={createTheGroup} disabled={busy || selected.length === 0} style={[styles.createBtn, { backgroundColor: selected.length ? theme.tint : theme.backgroundElement, marginBottom: insets.bottom + 10 }]}>
+        <Pressable onPress={createTheGroup} disabled={busy || selected.length === 0} style={[styles.createBtn, { backgroundColor: selected.length ? BRAND.accent : theme.backgroundElement, marginBottom: insets.bottom + 10 }]}>
           {busy ? <ActivityIndicator color="#fff" /> : <ThemedText type="smallBold" style={{ color: selected.length ? '#fff' : theme.textSecondary }}>Create group ({selected.length})</ThemedText>}
         </Pressable>
       ) : null}

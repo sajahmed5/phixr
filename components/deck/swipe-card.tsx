@@ -70,7 +70,7 @@ export const SwipeCard = memo(function SwipeCard({
 
       {/* Position counter — static, so it never competes with tap-to-advance. */}
       {shots ? (
-        <View style={[styles.carousel, { top: insets.top + 16 }]} pointerEvents="none">
+        <View style={[styles.carousel, { top: 16 }]} pointerEvents="none">
           <Ionicons name="copy" size={13} color="#fff" />
           <ThemedText type="small" style={styles.carouselText}>
             {Math.min(page, shots.length - 1) + 1}/{shots.length}

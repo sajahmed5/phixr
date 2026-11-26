@@ -50,7 +50,9 @@ const KINDS: { key: FeedbackKind; label: string; icon: keyof typeof Ionicons.gly
 ];
 
 const FAB_SIZE = 34;
-const FAB_MARGIN = 10;
+/** How much of the button peeks in from the screen edge at rest: a slim tab that stays
+ *  clear of switches, buttons and message bubbles (screens keep a 16pt side margin). */
+const FAB_PEEK = 18;
 const FAB_POS_KEY = 'phixr.reportFab.pos';
 
 type FabPos = { x: number; y: number };
@@ -97,7 +99,8 @@ export function ReportFab({ style }: { style?: StyleProp<ViewStyle> }) {
 
   const minY = insets.top + 8;
   const maxY = winH - insets.bottom - FAB_SIZE - 8;
-  const rightX = winW - FAB_SIZE - FAB_MARGIN;
+  const rightX = winW - FAB_PEEK;
+  const leftX = FAB_PEEK - FAB_SIZE;
   const resting: FabPos = pos ?? { x: rightX, y: Math.round(winH * 0.45) };
 
   // Live position during a drag; null when not dragging.
@@ -114,7 +117,7 @@ export function ReportFab({ style }: { style?: StyleProp<ViewStyle> }) {
           const x = restX + g.dx;
           // Snap to whichever side it's nearest, so it never sits stranded mid-screen.
           setPos({
-            x: x + FAB_SIZE / 2 < winW / 2 ? FAB_MARGIN : rightX,
+            x: x + FAB_SIZE / 2 < winW / 2 ? leftX : rightX,
             y: Math.max(minY, Math.min(maxY, restY + g.dy)),
           });
           setDrag(null);
@@ -122,7 +125,7 @@ export function ReportFab({ style }: { style?: StyleProp<ViewStyle> }) {
         onPanResponderTerminate: () => setDrag(null),
       }),
     // `resting` only changes on release, so the responder is never rebuilt mid-drag.
-    [restX, restY, minY, maxY, rightX, winW, setPos],
+    [restX, restY, minY, maxY, rightX, leftX, winW, setPos],
   );
 
   const at = drag ?? resting;
@@ -175,8 +178,12 @@ export function ReportFab({ style }: { style?: StyleProp<ViewStyle> }) {
         }}
         accessibilityRole="button"
         accessibilityLabel="Report a problem with the app. Drag to move it out of the way."
-        style={styles.fabHit}>
-        <Ionicons name="bug" size={16} color="#fff" />
+        style={[
+          styles.fabHit,
+          // Keep the icon inside the part that peeks out from the edge.
+          drag ? null : at.x > winW / 2 ? styles.fabHitRight : styles.fabHitLeft,
+        ]}>
+        <Ionicons name="bug" size={13} color="#fff" />
       </Pressable>
     </View>
   );
@@ -487,12 +494,14 @@ const styles = StyleSheet.create({
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    opacity: 0.75,
+    backgroundColor: 'rgba(60,60,67,0.6)',
+    opacity: 0.85,
     zIndex: 40,
   },
   fabDragging: { opacity: 1, transform: [{ scale: 1.15 }] },
   fabHit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  fabHitRight: { alignItems: 'flex-start', paddingLeft: 3 },
+  fabHitLeft: { alignItems: 'flex-end', paddingRight: 3 },
   // The sheet is an in-tree overlay, so it must claim the whole host window itself.
   sheetLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', zIndex: 50 },
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)' },

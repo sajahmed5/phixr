@@ -13,7 +13,7 @@ export default function HomeScreen() {
       <TeenWellbeingBanner />
       {/* One-time GDPR/PECR ad-consent choice for adults (brief 8D). */}
       <ErrorBoundary label="The feed">
-        <DeckView fetchBatch={fetchDeck} />
+        <DeckView fetchBatch={fetchDeck} persistKey="home" />
       </ErrorBoundary>
     </ThemedView>
   );

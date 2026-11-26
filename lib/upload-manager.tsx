@@ -12,8 +12,11 @@ import { trackFirst } from '@/lib/analytics';
 import type { VideoOverlay } from '@/lib/video-overlays';
 import { useAuth } from '@/lib/auth-context';
 import { dismissCameraCoach } from '@/lib/coach-marks';
+import { isOnline, isPermanentServerError } from '@/lib/connectivity';
+import { useOutbox } from '@/lib/outbox-provider';
 import {
   createPost,
+  UploadFailed,
   uploadToPipeline,
   UploadRejected,
   type PickedMedia,
@@ -56,7 +59,10 @@ export type Composition = {
   result: PipelineResult | null;
   extraResults: PipelineResult[];
   rejection: string | null; // adult-scan rejection message
-  uploadError: string | null; // retryable failure
+  uploadError: string | null; // failure message
+  /** True when the failure was the connection (or a server hiccup), so the composition
+   *  can be handed to the offline outbox instead of being lost. */
+  uploadRetryable: boolean;
   draft: Draft;
   submitRequested: boolean; // user tapped Post before the upload finished
   posting: boolean;
@@ -75,6 +81,9 @@ type UploadContextValue = {
   submit: () => void;
   /** Clear the composition (discard, or after the user acknowledges completion). */
   clear: () => void;
+  /** No connection: hand the composition to the offline outbox, which posts it (or saves
+   *  it to Drafts) once the signal returns, and clear the composer. */
+  queueOffline: (intent: 'post' | 'draft') => void;
 };
 
 const UploadContext = createContext<UploadContextValue | undefined>(undefined);
@@ -84,6 +93,7 @@ const nextId = () => `comp_${Date.now()}_${counter++}`;
 
 export function UploadManagerProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const { enqueuePost } = useOutbox();
   const [composition, setComposition] = useState<Composition | null>(null);
   const ref = useRef<Composition | null>(null);
   const abortRef = useRef<(() => void) | null>(null);
@@ -96,6 +106,26 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
+
+  const queueOffline = useCallback(
+    (intent: 'post' | 'draft') => {
+      const c = ref.current;
+      if (!c) return;
+      enqueuePost({
+        intent,
+        media: [c.media, ...c.extras],
+        // Keep whatever already made it through the pipeline so it isn't uploaded twice.
+        results: c.result ? [c.result, ...c.extraResults] : undefined,
+        draft: c.draft,
+        overlays: c.overlays,
+      });
+      abortRef.current?.();
+      abortRef.current = null;
+      ref.current = null;
+      setComposition(null);
+    },
+    [enqueuePost],
+  );
 
   const doSubmit = useCallback(async () => {
     const c = ref.current;
@@ -141,13 +171,19 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
       void dismissCameraCoach(); // first post made → the camera nudge is no longer needed
       set((x) => ({ ...x, posting: false, postedId: id }));
     } catch (e) {
+      // Signal dropped between upload and publish: the media is already processed, so the
+      // outbox only has to publish once the connection is back.
+      if (!isPermanentServerError(e) && !isOnline()) {
+        queueOffline('post');
+        return;
+      }
       set((x) => ({
         ...x,
         posting: false,
         postError: e instanceof Error ? e.message : 'Could not post.',
       }));
     }
-  }, [set, user?.id]);
+  }, [set, user?.id, queueOffline]);
 
   const runPipeline = useCallback(
     (id: string) => {
@@ -190,12 +226,24 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
                 : x,
             );
           } else {
+            const retryable = !(err instanceof UploadFailed) || err.retryable;
+            // The user already tapped Post and the signal is the problem: don't make them
+            // tap again — it goes to the outbox and posts once they're back online.
+            if (retryable && ref.current?.id === id && ref.current.submitRequested) {
+              queueOffline('post');
+              return;
+            }
             set((x) =>
               x.id === id
                 ? {
                     ...x,
                     phase: 'failed',
-                    uploadError: err instanceof Error ? err.message : 'Upload failed.',
+                    uploadRetryable: retryable,
+                    uploadError: !isOnline()
+                      ? 'No connection.'
+                      : err instanceof Error
+                        ? err.message
+                        : 'Upload failed.',
                   }
                 : x,
             );
@@ -203,7 +251,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
         }
       })();
     },
-    [set, doSubmit],
+    [set, doSubmit, queueOffline],
   );
 
   const begin = useCallback(
@@ -220,6 +268,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
         extraResults: [],
         rejection: null,
         uploadError: null,
+        uploadRetryable: false,
         draft: {
           caption: '',
           altText: '',
@@ -253,7 +302,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
   const retryUpload = useCallback(() => {
     const c = ref.current;
     if (!c) return;
-    set((x) => ({ ...x, phase: 'uploading', progress: 0, uploadError: null, extraResults: [] }));
+    set((x) => ({ ...x, phase: 'uploading', progress: 0, uploadError: null, uploadRetryable: false, extraResults: [] }));
     runPipeline(c.id);
   }, [set, runPipeline]);
 
@@ -273,8 +322,8 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<UploadContextValue>(
-    () => ({ composition, begin, updateDraft, retryUpload, submit, clear }),
-    [composition, begin, updateDraft, retryUpload, submit, clear],
+    () => ({ composition, begin, updateDraft, retryUpload, submit, clear, queueOffline }),
+    [composition, begin, updateDraft, retryUpload, submit, clear, queueOffline],
   );
 
   return <UploadContext.Provider value={value}>{children}</UploadContext.Provider>;

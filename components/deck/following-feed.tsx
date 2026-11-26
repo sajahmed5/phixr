@@ -5,8 +5,18 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 
 import { VideoOverlays } from '@/components/video-overlays';
 import { parseVideoOverlays } from '@/lib/video-overlays';
-import { memo, useCallback, useEffect, useState, useMemo } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type ViewToken,
+} from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -27,6 +37,7 @@ import { formatCount } from '@/lib/format';
 import { getExtrasForPosts, type PostMediaItem } from '@/lib/posts';
 import { resolveDeckMedia } from '@/lib/media';
 import { formatRelative } from '@/lib/relative-time';
+import { cachedVideoUri } from '@/lib/video-cache';
 
 const PAGE = 15;
 
@@ -46,6 +57,17 @@ export function FollowingFeed() {
   const [commentsFor, setCommentsFor] = useState<DeckCard | null>(null);
   const [shareFor, setShareFor] = useState<DeckCard | null>(null);
   const [extrasMap, setExtrasMap] = useState<Map<string, PostMediaItem[]>>(new Map());
+  // Only posts actually on screen play their video — not every video the list has
+  // rendered ahead (which used to stream several clips at once).
+  const [visibleIds, setVisibleIds] = useState<Set<string>>(() => new Set());
+  const [viewabilityConfig] = useState(() => ({ itemVisiblePercentThreshold: 60 }));
+  // FlatList needs this callback to keep the same identity for the list's lifetime.
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken<DeckCard>[] }) => {
+      setVisibleIds(new Set(viewableItems.map((v) => v.item?.id).filter(Boolean) as string[]));
+    },
+    [],
+  );
 
   const load = useCallback(async () => {
     try {
@@ -117,9 +139,12 @@ export function FollowingFeed() {
         }
         onEndReached={loadMore}
         onEndReachedThreshold={0.6}
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
         renderItem={({ item }) => (
           <FeedCard
             card={item}
+            active={visibleIds.has(item.id)}
             extras={extrasMap.get(item.id) ?? NO_EXTRAS}
             onOpenComments={() => setCommentsFor(item)}
             onOpenShare={() => setShareFor(item)}
@@ -162,11 +187,14 @@ const NO_EXTRAS: PostMediaItem[] = [];
 
 const FeedCard = memo(function FeedCard({
   card,
+  active,
   extras,
   onOpenComments,
   onOpenShare,
 }: {
   card: DeckCard;
+  /** On screen right now — only then does its video play. */
+  active: boolean;
   extras: PostMediaItem[];
   onOpenComments: () => void;
   onOpenShare: () => void;
@@ -237,7 +265,7 @@ const FeedCard = memo(function FeedCard({
       {card.sensitive && !revealed ? <SensitiveCover onReveal={() => setRevealed(true)} /> : null}
       {extras.length === 0 ? (
         card.media_type === 'video' ? (
-          <FeedVideo uri={card.media_url} overlays={card.overlays} />
+          <FeedVideo uri={card.media_url} overlays={card.overlays} active={active} />
         ) : (
           <Image
             source={{ uri: card.media_url }}
@@ -259,7 +287,7 @@ const FeedCard = memo(function FeedCard({
             {[{ media_url: card.media_url, media_type: card.media_type }, ...extras].map((m, i) => (
               <View key={i} style={{ width: winW }}>
                 {m.media_type === 'video' ? (
-                  <FeedVideo uri={m.media_url} />
+                  <FeedVideo uri={m.media_url} active={active && page === i} />
                 ) : (
                   <Image source={{ uri: m.media_url }} style={styles.media} contentFit="cover" />
                 )}
@@ -326,14 +354,19 @@ const FeedCard = memo(function FeedCard({
   );
 });
 
-function FeedVideo({ uri, overlays }: { uri: string; overlays?: unknown }) {
+function FeedVideo({ uri, overlays, active }: { uri: string; overlays?: unknown; active: boolean }) {
   const overlaysParsed = useMemo(() => parseVideoOverlays(overlays), [overlays]);
   const [box, setBox] = useState({ w: 0, h: 0 });
-  const player = useVideoPlayer(uri, (p) => {
+  // A copy downloaded ahead on Wi-Fi plays without the network; otherwise it streams.
+  const source = useMemo(() => cachedVideoUri(uri), [uri]);
+  const player = useVideoPlayer(source, (p) => {
     p.loop = true;
     p.muted = true;
-    p.play();
   });
+  useEffect(() => {
+    if (active) player.play();
+    else player.pause();
+  }, [active, player]);
   return (
     <View onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
       <VideoView player={player} style={styles.media} contentFit="cover" nativeControls={false} />

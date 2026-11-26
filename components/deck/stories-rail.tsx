@@ -5,7 +5,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { STORY_RING_SEEN } from '@/constants/config';
+import { STORY_RING_SEEN, BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { getStoriesRail, type RailItem } from '@/lib/stories';
 import { supabase } from '@/lib/supabase';
@@ -80,7 +80,7 @@ export function StoriesRail() {
             </Pressable>
             <Pressable
               onPress={create}
-              style={[styles.add, { backgroundColor: theme.tint, borderColor: theme.background }]}
+              style={[styles.add, { backgroundColor: BRAND.accent, borderColor: theme.background }]}
               hitSlop={6}
               accessibilityRole="button"
               accessibilityLabel="Add to your story">

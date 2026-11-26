@@ -21,6 +21,7 @@ import { ThemedView } from '@/components/themed-view';
 import { VerifyEmailBanner } from '@/components/verify-email-banner';
 import { BRAND, TAB_BAR_CLEARANCE } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { isBusinessProfile } from '@/lib/account-type';
 import { useAuth } from '@/lib/auth-context';
 import { getBookmarks, getCollections, type Collection, type SavedPost } from '@/lib/bookmarks';
 import { getMySwipes, undoSwipe, type SwipedPost } from '@/lib/deck';
@@ -31,6 +32,8 @@ import {
   type GridPost,
   type ProfileOverview,
 } from '@/lib/profile';
+import { useOutbox } from '@/lib/outbox-provider';
+import { shareProfile } from '@/lib/share';
 
 type Tab = 'posts' | 'liked' | 'skipped' | 'saved';
 type Cell = { id: string; thumbnail_url: string; media_type: 'image' | 'video'; media_count?: number };
@@ -42,6 +45,7 @@ export default function ProfileScreen() {
   const { width } = useWindowDimensions();
   const { profile: authProfile, user } = useAuth();
   const handle = authProfile?.handle;
+  const isBusiness = isBusinessProfile(authProfile);
 
   const [overview, setOverview] = useState<ProfileOverview | null>(null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -184,21 +188,53 @@ export default function ProfileScreen() {
         onPressFollowers={() => goConnections('followers')}
         onPressFollowing={() => goConnections('following')}
         action={
-          <View style={styles.actions}>
-            <ActionButton icon="create-outline" label="Edit profile" onPress={() => router.push('/profile/edit')} />
-      {user?.id ? (
-        <>
-          <ProfileLinksRow userId={user.id} />
-          <HighlightsRail userId={user.id} isOwner />
-        </>
-      ) : null}
-            <ActionButton icon="albums-outline" label="Drafts" onPress={() => router.push('/drafts')} />
-            <ActionButton icon="calendar-outline" label="Scheduled" onPress={() => router.push('/schedule')} />
-            <ActionButton icon="bar-chart-outline" label="Analytics" onPress={() => router.push('/analytics')} />
-            <ActionButton icon="person-add-outline" label="Requests" badge={requestCount} onPress={() => router.push('/profile/requests')} />
+          <View style={styles.actionsBlock}>
+            <View style={styles.actions}>
+              <PillButton label="Edit profile" onPress={() => router.push('/profile/edit')} />
+              <PillButton
+                label="Share profile"
+                onPress={() => void shareProfile(overview.handle, overview.display_name)}
+              />
+              {overview.is_private || requestCount > 0 ? (
+                <IconPill
+                  icon="person-add-outline"
+                  label="Follow requests"
+                  badge={requestCount}
+                  onPress={() => router.push('/profile/requests')}
+                />
+              ) : null}
+            </View>
+            {isBusiness ? (
+              <Pressable
+                onPress={() => router.push('/business-tools')}
+                accessibilityRole="button"
+                accessibilityLabel="Open business tools"
+                style={({ pressed }) => [
+                  styles.toolsCard,
+                  { backgroundColor: theme.backgroundElement, opacity: pressed ? 0.75 : 1 },
+                ]}>
+                <View style={[styles.toolsIcon, { backgroundColor: BRAND.accent }]}>
+                  <Ionicons name="briefcase" size={16} color={BRAND.onAccent} />
+                </View>
+                <View style={styles.toolsText}>
+                  <ThemedText type="smallBold">Business tools</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                    Analytics, drafts, scheduling, promotions and earnings
+                  </ThemedText>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+              </Pressable>
+            ) : null}
           </View>
         }
       />
+      {user?.id ? (
+        <View style={styles.showcase}>
+          {isBusiness ? <ProfileLinksRow userId={user.id} /> : null}
+          <HighlightsRail userId={user.id} isOwner />
+        </View>
+      ) : null}
+      <QueuedPostsStrip onPress={() => router.push('/drafts')} />
       <View style={[styles.tabs, { borderTopColor: theme.border, borderBottomColor: theme.border }]}>
         <TabButton icon="grid-outline" active={tab === 'posts'} onPress={() => setTab('posts')} label="Posts" />
         <TabButton icon="heart-outline" active={tab === 'liked'} onPress={() => setTab('liked')} label="Liked" />
@@ -331,7 +367,27 @@ function Chip({
   );
 }
 
-function ActionButton({
+/** Equal-width rounded button for the main profile actions (Edit / Share). */
+function PillButton({ label, onPress }: { label: string; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.pill,
+        { backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : 1 },
+      ]}>
+      <ThemedText type="smallBold" numberOfLines={1}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+/** Square icon button that sits beside the pills (e.g. follow requests, with a count). */
+function IconPill({
   icon,
   label,
   onPress,
@@ -347,15 +403,16 @@ function ActionButton({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      style={({ pressed }) => [styles.action, { borderColor: theme.border, opacity: pressed ? 0.7 : 1 }]}>
+      accessibilityLabel={badge ? `${label}, ${badge}` : label}
+      style={({ pressed }) => [
+        styles.iconPill,
+        { backgroundColor: theme.backgroundElement, opacity: pressed ? 0.7 : 1 },
+      ]}>
       <Ionicons name={icon} size={18} color={theme.text} />
-      <ThemedText type="small" style={styles.actionLabel} numberOfLines={1}>
-        {label}
-      </ThemedText>
       {badge ? (
-        <View style={styles.actionBadge}>
+        <View style={styles.iconBadge}>
           <ThemedText type="small" style={styles.badgeText}>
-            {badge}
+            {badge > 99 ? '99+' : badge}
           </ThemedText>
         </View>
       ) : null}
@@ -363,23 +420,52 @@ function ActionButton({
   );
 }
 
+/** Posts made without signal, waiting to upload — so they're visible on your profile. */
+function QueuedPostsStrip({ onPress }: { onPress: () => void }) {
+  const theme = useTheme();
+  const { posts } = useOutbox();
+  const waiting = posts.filter((p) => p.status === 'waiting' || p.status === 'sending');
+  const failed = posts.filter((p) => p.status === 'failed' || p.status === 'rejected');
+  if (waiting.length === 0 && failed.length === 0) return null;
+  const text = failed.length
+    ? `${failed.length} post${failed.length === 1 ? '' : 's'} couldn’t be uploaded`
+    : `${waiting.length} post${waiting.length === 1 ? '' : 's'} waiting to upload`;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      style={[styles.queueStrip, { backgroundColor: theme.backgroundElement }]}>
+      <Ionicons
+        name={failed.length ? 'alert-circle-outline' : 'cloud-upload-outline'}
+        size={18}
+        color={failed.length ? theme.danger : theme.textSecondary}
+      />
+      <ThemedText type="small" style={{ flex: 1 }}>
+        {text}
+      </ThemedText>
+      <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  actionsBlock: { gap: 10 },
   actions: { flexDirection: 'row', gap: 8 },
-  action: {
+  pill: {
     flex: 1,
-    flexDirection: 'row',
+    height: 38,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 10,
   },
-  actionLabel: { fontWeight: '600' },
-  actionBadge: {
+  iconPill: { width: 44, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  iconBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
     backgroundColor: BRAND.accent,
     borderRadius: 999,
     minWidth: 18,
@@ -387,6 +473,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
+  },
+  toolsCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 12, padding: 12 },
+  toolsIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  toolsText: { flex: 1, gap: 1 },
+  showcase: { gap: 12, paddingBottom: 6 },
+  queueStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 20,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
   badgeText: { color: BRAND.onAccent, fontWeight: '700' },
   tabs: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, marginTop: 6 },

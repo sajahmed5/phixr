@@ -1,3 +1,4 @@
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -13,16 +14,31 @@ import {
   View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, {
+  cancelAnimation,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useKeyboardHeight } from '@/lib/use-keyboard-height';
 import { ThemedText } from '@/components/themed-text';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { useTheme } from '@/hooks/use-theme';
 import { confirm } from '@/lib/confirm';
 import { blockUser, reportUser } from '@/lib/profile';
 import { formatRelative } from '@/lib/relative-time';
-import { deleteStory, getStoryViewers, getUserStories, markStoryViewed, replyToStory, type Story, type StoryViewer } from '@/lib/stories';
+import {
+  deleteStory,
+  getStoryViewers,
+  getUserStories,
+  markStoryViewed,
+  replyToStory,
+  type Story,
+  type StoryViewer,
+} from '@/lib/stories';
 import { supabase } from '@/lib/supabase';
 
 const { width: W, height: H } = Dimensions.get('window');
@@ -33,6 +49,7 @@ export default function StoryViewerScreen() {
   const { userId, ids } = useLocalSearchParams<{ userId: string; ids?: string }>();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardHeight();
 
   const accounts = useMemo(() => (ids ? ids.split(',').filter(Boolean) : [userId]), [ids, userId]);
   const [accountIndex, setAccountIndex] = useState(Math.max(0, accounts.indexOf(userId)));
@@ -121,7 +138,10 @@ export default function StoryViewerScreen() {
 
     progress.value = 0;
     if (story.media_type === 'image') {
-      if (!paused) progress.value = withTiming(1, { duration: IMAGE_MS }, (f) => { if (f) runOnJS(advance)(); });
+      if (!paused)
+        progress.value = withTiming(1, { duration: IMAGE_MS }, (f) => {
+          if (f) runOnJS(advance)();
+        });
       return () => cancelAnimation(progress);
     }
     return;
@@ -208,19 +228,35 @@ export default function StoryViewerScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar style="light" />
       <GestureDetector gesture={pan}>
         <View style={StyleSheet.absoluteFill}>
           {loading || !story ? (
-            <View style={styles.center}><ActivityIndicator color="#fff" /></View>
+            <View style={styles.center}>
+              <ActivityIndicator color="#fff" />
+            </View>
           ) : story.media_type === 'video' ? (
-            <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} pointerEvents="none" />
+            <VideoView
+              player={player}
+              style={StyleSheet.absoluteFill}
+              contentFit="contain"
+              nativeControls={false}
+              pointerEvents="none"
+            />
           ) : (
-            <Image source={{ uri: story.media_url }} style={StyleSheet.absoluteFill} contentFit="contain" transition={120} />
+            <Image
+              source={{ uri: story.media_url }}
+              style={StyleSheet.absoluteFill}
+              contentFit="contain"
+              transition={120}
+            />
           )}
 
           {story?.overlay_text ? (
             <View style={styles.overlayWrap} pointerEvents="none">
-              <ThemedText type="title" style={styles.overlayText}>{story.overlay_text}</ThemedText>
+              <ThemedText type="title" style={styles.overlayText}>
+                {story.overlay_text}
+              </ThemedText>
             </View>
           ) : null}
 
@@ -247,30 +283,56 @@ export default function StoryViewerScreen() {
       <View style={[styles.bars, { top: insets.top + 6 }]} pointerEvents="none">
         {stories.map((s, i) => (
           <View key={s.id} style={styles.barTrack}>
-            <Animated.View style={[styles.barFill, i < seg ? { width: '100%' } : i === seg ? barStyle : { width: '0%' }]} />
+            <Animated.View
+              style={[
+                styles.barFill,
+                i < seg ? { width: '100%' } : i === seg ? barStyle : { width: '0%' },
+              ]}
+            />
           </View>
         ))}
       </View>
 
       {/* header */}
       <View style={[styles.header, { top: insets.top + 16 }]}>
-        {ownerAvatar ? <Image source={{ uri: ownerAvatar }} style={styles.headerAvatar} contentFit="cover" /> : <View style={[styles.headerAvatar, { backgroundColor: '#444' }]} />}
-        <ThemedText type="smallBold" style={{ color: '#fff', flex: 1 }} numberOfLines={1}>{ownerName}</ThemedText>
-        {story ? <ThemedText type="small" style={{ color: 'rgba(255,255,255,0.8)' }}>{formatRelative(story.created_at)}</ThemedText> : null}
-        {story?.is_self ? (
-          <Pressable onPress={confirmDelete} hitSlop={8} accessibilityLabel="Delete story"><Ionicons name="trash-outline" size={21} color="#fff" /></Pressable>
+        {ownerAvatar ? (
+          <Image source={{ uri: ownerAvatar }} style={styles.headerAvatar} contentFit="cover" />
         ) : (
-          <Pressable onPress={() => setMenu(true)} hitSlop={8}><Ionicons name="ellipsis-horizontal" size={22} color="#fff" /></Pressable>
+          <View style={[styles.headerAvatar, { backgroundColor: '#444' }]} />
         )}
-        <Pressable onPress={() => router.back()} hitSlop={8}><Ionicons name="close" size={24} color="#fff" /></Pressable>
+        <ThemedText type="smallBold" style={{ color: '#fff', flex: 1 }} numberOfLines={1}>
+          {ownerName}
+        </ThemedText>
+        {story ? (
+          <ThemedText type="small" style={{ color: 'rgba(255,255,255,0.8)' }}>
+            {formatRelative(story.created_at)}
+          </ThemedText>
+        ) : null}
+        {story?.is_self ? (
+          <Pressable onPress={confirmDelete} hitSlop={8} accessibilityLabel="Delete story">
+            <Ionicons name="trash-outline" size={21} color="#fff" />
+          </Pressable>
+        ) : (
+          <Pressable onPress={() => setMenu(true)} hitSlop={8}>
+            <Ionicons name="ellipsis-horizontal" size={22} color="#fff" />
+          </Pressable>
+        )}
+        <Pressable onPress={() => router.back()} hitSlop={8}>
+          <Ionicons name="close" size={24} color="#fff" />
+        </Pressable>
       </View>
 
       {/* footer: own → viewers; others → reply */}
       {story?.is_self ? (
         <View style={[styles.footerSelf, { bottom: insets.bottom + 16, gap: 18 }]}>
-          <Pressable onPress={openViewers} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Pressable
+            onPress={openViewers}
+            hitSlop={8}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Ionicons name="eye-outline" size={18} color="#fff" />
-            <ThemedText type="small" style={{ color: '#fff' }}>Viewers</ThemedText>
+            <ThemedText type="small" style={{ color: '#fff' }}>
+              Viewers
+            </ThemedText>
           </Pressable>
           <Pressable
             hitSlop={8}
@@ -279,7 +341,8 @@ export default function StoryViewerScreen() {
               // Part 12C: add this story to a highlight (original audience kept).
               setPaused(true);
               try {
-                const { getHighlights, addStoryToHighlight, createHighlight } = await import('@/lib/showcase');
+                const { getHighlights, addStoryToHighlight, createHighlight } =
+                  await import('@/lib/showcase');
                 const { data: u } = await (await import('@/lib/supabase')).supabase.auth.getUser();
                 const hs = await getHighlights(u.user!.id);
                 const add = async (hid: string) => {
@@ -302,18 +365,32 @@ export default function StoryViewerScreen() {
               }
             }}>
             <Ionicons name="heart-circle-outline" size={18} color="#fff" />
-            <ThemedText type="small" style={{ color: '#fff' }}>Highlight</ThemedText>
+            <ThemedText type="small" style={{ color: '#fff' }}>
+              Highlight
+            </ThemedText>
           </Pressable>
         </View>
       ) : (
-        <Pressable onPress={() => { setPaused(true); setReplying(true); }} style={[styles.replyPrompt, { bottom: insets.bottom + 16 }]}>
-          <ThemedText type="small" style={{ color: 'rgba(255,255,255,0.9)' }}>Reply to {ownerName}…</ThemedText>
+        <Pressable
+          onPress={() => {
+            setPaused(true);
+            setReplying(true);
+          }}
+          style={[styles.replyPrompt, { bottom: insets.bottom + 16 }]}>
+          <ThemedText type="small" style={{ color: 'rgba(255,255,255,0.9)' }}>
+            Reply to {ownerName}…
+          </ThemedText>
         </Pressable>
       )}
 
       {/* reply composer */}
       {replying ? (
-        <View style={[styles.replyBar, { paddingBottom: insets.bottom + 8 }]}>
+        <View
+          style={[
+            styles.replyBar,
+            // Above the keyboard while typing; clear of the home indicator otherwise.
+            { bottom: keyboard, paddingBottom: keyboard > 0 ? 10 : insets.bottom + 8 },
+          ]}>
           <TextInput
             value={replyText}
             onChangeText={setReplyText}
@@ -321,10 +398,17 @@ export default function StoryViewerScreen() {
             placeholderTextColor="rgba(255,255,255,0.6)"
             style={styles.replyInput}
             autoFocus
-            onBlur={() => { setReplying(false); setPaused(false); }}
+            onBlur={() => {
+              setReplying(false);
+              setPaused(false);
+            }}
           />
           <Pressable onPress={onReplySend} hitSlop={8} disabled={!replyText.trim()}>
-            <Ionicons name="send" size={22} color={replyText.trim() ? theme.tint : 'rgba(255,255,255,0.5)'} />
+            <Ionicons
+              name="send"
+              size={22}
+              color={replyText.trim() ? theme.tint : 'rgba(255,255,255,0.5)'}
+            />
           </Pressable>
         </View>
       ) : null}
@@ -332,28 +416,74 @@ export default function StoryViewerScreen() {
       <ActionMenu
         visible={menu}
         options={[
-          { label: 'Report', onPress: () => { if (currentUserId) reportUser(currentUserId, 'Inappropriate story').then(() => Alert.alert('Thanks', 'Reported.')); } },
-          { label: 'Block', destructive: true, onPress: async () => { if (currentUserId) { await blockUser(currentUserId); router.back(); } } },
+          {
+            label: 'Report',
+            onPress: () => {
+              if (currentUserId)
+                reportUser(currentUserId, 'Inappropriate story').then(() =>
+                  Alert.alert('Thanks', 'Reported.'),
+                );
+            },
+          },
+          {
+            label: 'Block',
+            destructive: true,
+            onPress: async () => {
+              if (currentUserId) {
+                await blockUser(currentUserId);
+                router.back();
+              }
+            },
+          },
         ]}
         onClose={() => setMenu(false)}
       />
 
       {/* viewer list (own stories only, non-anonymous) */}
       {viewers ? (
-        <Pressable style={styles.viewerBackdrop} onPress={() => { setViewers(null); setPaused(false); }}>
-          <View style={[styles.viewerSheet, { backgroundColor: theme.background, paddingBottom: insets.bottom + 12 }]}>
-            <ThemedText type="subtitle" style={{ padding: 14 }}>{viewers.length} {viewers.length === 1 ? 'view' : 'views'}</ThemedText>
+        <Pressable
+          style={styles.viewerBackdrop}
+          onPress={() => {
+            setViewers(null);
+            setPaused(false);
+          }}>
+          <View
+            style={[
+              styles.viewerSheet,
+              { backgroundColor: theme.background, paddingBottom: insets.bottom + 12 },
+            ]}>
+            <ThemedText type="subtitle" style={{ padding: 14 }}>
+              {viewers.length} {viewers.length === 1 ? 'view' : 'views'}
+            </ThemedText>
             {viewers.map((v) => (
               <View key={v.viewer_id} style={styles.viewerRow}>
-                {v.avatar_url ? <Image source={{ uri: v.avatar_url }} style={styles.viewerAvatar} contentFit="cover" /> : <View style={[styles.viewerAvatar, { backgroundColor: theme.backgroundSelected }]} />}
+                {v.avatar_url ? (
+                  <Image
+                    source={{ uri: v.avatar_url }}
+                    style={styles.viewerAvatar}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View
+                    style={[styles.viewerAvatar, { backgroundColor: theme.backgroundSelected }]}
+                  />
+                )}
                 <View style={{ flex: 1 }}>
                   <ThemedText type="smallBold">{v.display_name}</ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">@{v.handle}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    @{v.handle}
+                  </ThemedText>
                 </View>
-                <ThemedText type="small" themeColor="textSecondary">{formatRelative(v.viewed_at)}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {formatRelative(v.viewed_at)}
+                </ThemedText>
               </View>
             ))}
-            {viewers.length === 0 ? <ThemedText type="small" themeColor="textSecondary" style={{ padding: 14 }}>No views yet.</ThemedText> : null}
+            {viewers.length === 0 ? (
+              <ThemedText type="small" themeColor="textSecondary" style={{ padding: 14 }}>
+                No views yet.
+              </ThemedText>
+            ) : null}
           </View>
         </Pressable>
       ) : null}
@@ -365,18 +495,89 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   overlayWrap: { position: 'absolute', top: '45%', left: 20, right: 20, alignItems: 'center' },
-  overlayText: { color: '#fff', textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
+  overlayText: {
+    color: '#fff',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowRadius: 6,
+    textShadowOffset: { width: 0, height: 1 },
+  },
   bars: { position: 'absolute', left: 8, right: 8, flexDirection: 'row', gap: 3 },
-  barTrack: { flex: 1, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)', overflow: 'hidden' },
+  barTrack: {
+    flex: 1,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.35)',
+    overflow: 'hidden',
+  },
   barFill: { height: 3, backgroundColor: '#fff' },
-  header: { position: 'absolute', left: 12, right: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  header: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   headerAvatar: { width: 32, height: 32, borderRadius: 16 },
-  footerSelf: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 999 },
-  replyPrompt: { position: 'absolute', alignSelf: 'center', paddingHorizontal: 24, paddingVertical: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', borderRadius: 999 },
-  replyBar: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: 10, backgroundColor: 'rgba(0,0,0,0.85)' },
-  replyInput: { flex: 1, color: '#fff', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, fontSize: 15 },
-  viewerBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  footerSelf: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 999,
+  },
+  replyPrompt: {
+    position: 'absolute',
+    alignSelf: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderRadius: 999,
+  },
+  replyBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+  },
+  replyInput: {
+    flex: 1,
+    color: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    fontSize: 15,
+  },
+  viewerBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
   viewerSheet: { borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: H * 0.6 },
-  viewerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 8 },
+  viewerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
   viewerAvatar: { width: 40, height: 40, borderRadius: 20 },
 });

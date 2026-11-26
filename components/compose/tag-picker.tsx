@@ -56,7 +56,8 @@ export function TagPicker({
     if (!q) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const rows = await searchTags(q);
+      // Offline, suggestions just don't appear; typing a tag and pressing done still works.
+      const rows = await searchTags(q).catch(() => [] as Tag[]);
       if (!cancelled) setSearch({ q, rows });
     }, SEARCH_DEBOUNCE_MS);
     return () => {

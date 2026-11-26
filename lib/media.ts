@@ -63,6 +63,37 @@ export async function resolveDeckMedia(cards: DeckCard[]): Promise<DeckCard[]> {
   });
 }
 
+// .../storage/v1/object/sign/media/<path>?token=...
+const SIGNED_MEDIA_RE = /\/storage\/v1\/object\/sign\/media\/([^?]+)/;
+
+/** The bucket path behind a signed media URL (or the value unchanged if it isn't one). */
+export function storagePathFromUrl(url: string): string {
+  const m = url.match(SIGNED_MEDIA_RE);
+  if (!m) return url;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return m[1];
+  }
+}
+
+/**
+ * Fresh links for cards whose signed URLs may have expired — e.g. a deck saved on the
+ * phone and reopened hours later. Same signing (and the same visibility rules) as a
+ * normal batch.
+ */
+export async function resignDeckMedia(cards: DeckCard[]): Promise<DeckCard[]> {
+  return resolveDeckMedia(
+    cards.map((c) => ({
+      ...c,
+      media_url: storagePathFromUrl(c.media_url),
+      thumbnail_url: storagePathFromUrl(c.thumbnail_url),
+      carousel: undefined,
+      media_count: undefined,
+    })),
+  );
+}
+
 type CarouselItem = { media_url: string; media_type: 'image' | 'video' };
 
 /**

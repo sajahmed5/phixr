@@ -91,7 +91,7 @@ export default function TagPage() {
         <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={26} color={theme.text} />
         </Pressable>
-        <ThemedText type="subtitle" numberOfLines={1} style={{ flex: 1 }}>
+        <ThemedText type="smallBold" numberOfLines={1} style={{ flex: 1, fontSize: 17 }}>
           #{name}
         </ThemedText>
       </View>
@@ -104,7 +104,7 @@ export default function TagPage() {
         ListHeaderComponent={
           <View style={styles.meta}>
             <View style={{ flex: 1 }}>
-              <ThemedText type="title">#{name}</ThemedText>
+              <ThemedText type="subtitle">#{name}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
                 {(meta?.post_count ?? 0).toLocaleString()} {meta?.post_count === 1 ? 'post' : 'posts'} · tap a post to swipe
               </ThemedText>

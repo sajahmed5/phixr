@@ -9,6 +9,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { CameraCoachMark } from '@/components/camera-coach-mark';
 import { OfflineBanner } from '@/components/offline-banner';
+import { BRAND } from '@/constants/config';
+import { Colors } from '@/constants/theme';
 import { ReportIssueProvider } from '@/components/report-issue';
 import { UploadBanner } from '@/components/upload-banner';
 import { TERMS_VERSION } from '@/constants/legal';
@@ -19,6 +21,7 @@ import { awardActiveDay } from '@/lib/points';
 import { AuthProvider, useAuth, type AuthStatus } from '@/lib/auth-context';
 import { NotificationsProvider } from '@/lib/notifications-provider';
 import { initSentry, Sentry } from '@/lib/sentry';
+import { OutboxProvider } from '@/lib/outbox-provider';
 import { UploadManagerProvider } from '@/lib/upload-manager';
 
 // Initialise crash reporting as early as possible — before any component renders — so a
@@ -38,6 +41,33 @@ SplashScreen.preventAutoHideAsync();
  *   onboarding   → (onboarding)/tags
  *   ready        → (tabs)
  */
+
+// Navigation chrome (stack headers, back arrows, screen backgrounds) in the app's own
+// colours, so pushed screens match the tabs: no grey header band over a black screen in
+// dark mode, and brand-orange back arrows instead of iOS blue.
+const NAV_THEME_LIGHT = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: BRAND.accent,
+    background: Colors.light.background,
+    card: Colors.light.background,
+    text: Colors.light.text,
+    border: Colors.light.border,
+  },
+};
+const NAV_THEME_DARK = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: BRAND.accent,
+    background: Colors.dark.background,
+    card: Colors.dark.background,
+    text: Colors.dark.text,
+    border: Colors.dark.border,
+  },
+};
+
 function useAuthGuard(status: AuthStatus) {
   const segments = useSegments();
   const router = useRouter();
@@ -177,9 +207,10 @@ function RootNavigator() {
       />
       <Stack.Screen name="appeal" options={{ presentation: 'modal', headerShown: true, title: 'Appeal' }} />
       <Stack.Screen name="add-account" options={{ presentation: 'modal', headerShown: true, title: 'Add account' }} />
+      <Stack.Screen name="business-tools" options={{ headerShown: true, title: 'Business tools' }} />
       <Stack.Screen name="drafts" options={{ headerShown: true, title: 'Drafts' }} />
       <Stack.Screen name="schedule" options={{ headerShown: true, title: 'Content calendar' }} />
-      <Stack.Screen name="settings/creator-tools" options={{ headerShown: true, title: 'Creator tools' }} />
+      <Stack.Screen name="settings/creator-tools" options={{ headerShown: true }} />
       <Stack.Screen name="settings/sessions" options={{ headerShown: true, title: 'Devices & sessions' }} />
       <Stack.Screen name="recover" options={{ headerShown: true, title: 'Account recovery' }} />
     </Stack>
@@ -192,18 +223,20 @@ function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <ThemeProvider value={colorScheme === 'dark' ? NAV_THEME_DARK : NAV_THEME_LIGHT}>
           <AuthProvider>
             <NotificationsProvider>
-              <UploadManagerProvider>
-                {/* Wraps the app so a report can screenshot the screen behind it. */}
-                <ReportIssueProvider>
-                  <RootNavigator />
-                  <UploadBanner />
-                  <CameraCoachMark />
-                  <OfflineBanner />
-                </ReportIssueProvider>
-              </UploadManagerProvider>
+              <OutboxProvider>
+                <UploadManagerProvider>
+                  {/* Wraps the app so a report can screenshot the screen behind it. */}
+                  <ReportIssueProvider>
+                    <RootNavigator />
+                    <UploadBanner />
+                    <CameraCoachMark />
+                    <OfflineBanner />
+                  </ReportIssueProvider>
+                </UploadManagerProvider>
+              </OutboxProvider>
             </NotificationsProvider>
           </AuthProvider>
           <StatusBar style="auto" />

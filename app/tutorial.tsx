@@ -17,15 +17,18 @@ import { markTutorialComplete } from '@/lib/profile';
  */
 export default function TutorialModal() {
   const router = useRouter();
-  const { reload } = useAuth();
+  const { reload, profile } = useAuth();
+  // Only the very first run arms the "make your first post" hint — replaying the
+  // tutorial from Settings must not bring it back for people who already post.
+  const firstRun = !(profile as { tutorial_complete?: boolean } | null)?.tutorial_complete;
 
   const done = useCallback(() => {
     void markTutorialComplete()
       .then(() => reload())
       .catch(() => {});
-    void armCameraCoach();
+    if (firstRun) void armCameraCoach();
     router.back();
-  }, [router, reload]);
+  }, [router, reload, firstRun]);
 
   return (
     <>

@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
 
+import { BusinessOnly } from '@/components/business-only';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
@@ -24,6 +25,17 @@ const KIND_LABELS: Record<string, string> = {
  * Under-18s never see this screen (and the server refuses them anyway).
  */
 export default function EarningsScreen() {
+  return (
+    <>
+      <Stack.Screen options={{ headerShown: true, title: 'Earnings' }} />
+      <BusinessOnly feature="Earnings">
+        <EarningsScreenInner />
+      </BusinessOnly>
+    </>
+  );
+}
+
+function EarningsScreenInner() {
   const theme = useTheme();
   const { profile } = useAuth();
   const [data, setData] = useState<MyEarnings | null>(null);

@@ -55,8 +55,12 @@ export function ProfileHeader({
           </Pressable>
         ) : (
           <View style={styles.counts}>
-            <Stat label="Posts" value={profile.post_count} />
-            <Stat label="Followers" value={profile.follower_count} onPress={onPressFollowers} />
+            <Stat label={profile.post_count === 1 ? 'Post' : 'Posts'} value={profile.post_count} />
+            <Stat
+              label={profile.follower_count === 1 ? 'Follower' : 'Followers'}
+              value={profile.follower_count}
+              onPress={onPressFollowers}
+            />
             <Stat label="Following" value={profile.following_count} onPress={onPressFollowing} />
           </View>
         )}
@@ -70,7 +74,9 @@ export function ProfileHeader({
           accessibilityRole={onPressIdentity ? 'button' : undefined}
           accessibilityLabel={onPressIdentity ? 'Switch account' : undefined}
           style={styles.identityRow}>
-          <ThemedText type="subtitle">{profile.display_name}</ThemedText>
+          <ThemedText type="subtitle" style={styles.name} numberOfLines={1}>
+            {profile.display_name}
+          </ThemedText>
           {onPressIdentity ? (
             <Ionicons name="chevron-down" size={16} color={BRAND.accent} />
           ) : null}
@@ -82,9 +88,13 @@ export function ProfileHeader({
         </ThemedText>
         {showPointsHero ? (
           <View style={styles.inlineStats}>
-            <InlineStat value={profile.post_count} label="posts" />
+            <InlineStat value={profile.post_count} label={profile.post_count === 1 ? 'post' : 'posts'} />
             <ThemedText type="small" themeColor="textSecondary">·</ThemedText>
-            <InlineStat value={profile.follower_count} label="followers" onPress={onPressFollowers} />
+            <InlineStat
+              value={profile.follower_count}
+              label={profile.follower_count === 1 ? 'follower' : 'followers'}
+              onPress={onPressFollowers}
+            />
             <ThemedText type="small" themeColor="textSecondary">·</ThemedText>
             <InlineStat value={profile.following_count} label="following" onPress={onPressFollowing} />
           </View>
@@ -104,7 +114,9 @@ export function ProfileHeader({
 function Stat({ label, value, onPress }: { label: string; value: number; onPress?: () => void }) {
   const content = (
     <View style={styles.stat}>
-      <ThemedText type="subtitle">{formatCount(value)}</ThemedText>
+      <ThemedText type="subtitle" style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+        {formatCount(value)}
+      </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
         {label}
       </ThemedText>
@@ -143,7 +155,10 @@ const styles = StyleSheet.create({
   stat: { alignItems: 'center', gap: 2 },
   pointsHero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
   pointsValue: { fontSize: 40, lineHeight: 44 },
-  identityRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  identityRow: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%' },
+  // Long names stay on one line instead of pushing the chevron off-screen.
+  name: { fontSize: 26, lineHeight: 32, flexShrink: 1 },
+  statValue: { fontSize: 20, lineHeight: 26, fontWeight: '700' },
   identity: { gap: 3 },
   inlineStats: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 2 },
   bio: { marginTop: 4 },

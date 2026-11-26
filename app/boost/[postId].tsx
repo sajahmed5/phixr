@@ -2,6 +2,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { BusinessOnly } from '@/components/business-only';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,17 @@ import { getClientSettings, settingNumber } from '@/lib/settings';
  * the band choices here are adult bands only.
  */
 export default function BoostComposerScreen() {
+  return (
+    <>
+      <Stack.Screen options={{ headerShown: true, title: 'Boost this post' }} />
+      <BusinessOnly feature="Boosts">
+        <BoostComposerScreenInner />
+      </BusinessOnly>
+    </>
+  );
+}
+
+function BoostComposerScreenInner() {
   const { postId } = useLocalSearchParams<{ postId: string }>();
   const theme = useTheme();
   const router = useRouter();

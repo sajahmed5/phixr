@@ -1,8 +1,10 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { track, trackFirst } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth-context';
+import { isOnline, onConnectivityChange } from '@/lib/connectivity';
 import { haptics } from '@/lib/haptics';
 import {
   arrangeAdPlacement,
@@ -13,19 +15,33 @@ import {
 } from '@/lib/deck';
 import { registerSwitchFlusher } from '@/lib/accounts';
 import { getClientSettings } from '@/lib/settings';
-import { resolveDeckMedia } from '@/lib/media';
+import { resignDeckMedia, resolveDeckMedia } from '@/lib/media';
 import { attachPartnershipLabels } from '@/lib/partnerships';
 import { SwipeQueue } from '@/lib/swipe-queue';
+import { prefetchVideo } from '@/lib/video-cache';
 import { ViewEventQueue } from '@/lib/view-events';
 
-export type DeckStatus = 'loading' | 'ready' | 'exhausted' | 'error';
+/** 'offline' = nothing left to show and no signal to fetch more (a calm state, not an error). */
+export type DeckStatus = 'loading' | 'ready' | 'exhausted' | 'error' | 'offline';
 
 // Start fetching the next batch once the buffer drops to ~card 5 of the current 20.
 const REFILL_AT = DECK_BATCH_SIZE - 5;
-// Warm the media for the next few cards so they don't pop in.
 // Warm the next ~15 cards' media so swiping stays smooth (image bytes are already
 // in expo-image's cache by the time the card reaches the top).
 const PREFETCH_AHEAD = 15;
+// On Wi-Fi, also download the next few videos so they play instantly — and still play if
+// the signal drops. Never on mobile data (see lib/video-cache).
+const VIDEO_PREFETCH_AHEAD = 3;
+// A saved deck older than this isn't worth showing (posts may be gone or stale).
+const SAVED_DECK_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+type SavedDeck = { savedAt: number; cards: DeckCard[] };
+
+export type UseDeckOptions = {
+  /** Keep the unseen cards on the phone under this key, so the deck still has something
+   *  to show when the app is opened with no signal. Only the main feed sets it. */
+  persistKey?: string;
+};
 
 export type UseDeck = {
   cards: DeckCard[];
@@ -43,12 +59,20 @@ export type UseDeck = {
  * `fetchBatch` decides which candidate pool (worldwide vs following) fills the buffer;
  * everything downstream (swipe/points/undo/offline queue) is identical across feeds.
  */
-export function useDeck(fetchBatch: FetchBatch): UseDeck {
+export function useDeck(fetchBatch: FetchBatch, options: UseDeckOptions = {}): UseDeck {
   const { user } = useAuth();
   const uid = user?.id;
+  const savedKey = uid && options.persistKey ? `deck-buffer:${uid}:${options.persistKey}` : null;
 
   const [cards, setCards] = useState<DeckCard[]>([]);
   const [status, setStatus] = useState<DeckStatus>('loading');
+  const statusRef = useRef<DeckStatus>('loading');
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  // Cards restored from the phone carry links that may have expired; re-sign them as soon
+  // as there's signal.
+  const needsResign = useRef(false);
   // Part 14A: undo the last N swipes (server setting swipe_undo_depth),
   // newest first. The server replaces each undone swipe in analytics.
   const [undoStack, setUndoStack] = useState<DeckCard[]>([]);
@@ -88,9 +112,31 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
     for (const card of list.slice(0, PREFETCH_AHEAD)) {
       // Images: warm the full-bleed image. Videos: warm the poster thumbnail.
       const url = card.media_type === 'image' ? card.media_url : card.thumbnail_url;
-      if (url) void Image.prefetch(url);
+      if (url) void Image.prefetch(url).catch(() => false);
+    }
+    // Wi-Fi only (checked inside): the next few videos themselves.
+    for (const card of list.slice(0, VIDEO_PREFETCH_AHEAD)) {
+      if (card.media_type === 'video') prefetchVideo(card.media_url);
     }
   }, []);
+
+  // Fresh links for restored cards (matched by id, so swipes made meanwhile are kept).
+  const resignBuffer = useCallback(
+    async (list?: DeckCard[]) => {
+      const current = list ?? cardsRef.current;
+      if (current.length === 0) return;
+      try {
+        const fresh = await resignDeckMedia(current);
+        const byId = new Map(fresh.map((c) => [c.id, c]));
+        needsResign.current = false;
+        setCards((prev) => prev.map((c) => byId.get(c.id) ?? c));
+        prefetchMedia(fresh);
+      } catch {
+        needsResign.current = true; // try again on the next reconnect
+      }
+    },
+    [prefetchMedia],
+  );
 
   const loadInitial = useCallback(async () => {
     if (!uid) return;
@@ -101,14 +147,28 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
         await attachPartnershipLabels(await resolveDeckMedia(await fetchBatch([]))),
       );
       batch.forEach((c) => loadedIds.current.add(c.id));
+      needsResign.current = false;
       setCards(batch);
       setUndoStack([]);
       setStatus(batch.length === 0 ? 'exhausted' : 'ready');
       prefetchMedia(batch);
     } catch {
-      setStatus('error');
+      // No signal (or a server hiccup): fall back to the cards saved on the phone from
+      // last time. Their images are already in the image cache, so they show offline;
+      // swipes on them queue up and sync later like any other.
+      const saved = savedKey ? await readSavedDeck(savedKey) : null;
+      if (saved && saved.cards.length > 0) {
+        saved.cards.forEach((c) => loadedIds.current.add(c.id));
+        needsResign.current = true;
+        setCards(saved.cards);
+        setUndoStack([]);
+        setStatus('ready');
+        if (isOnline()) void resignBuffer(saved.cards);
+        return;
+      }
+      setStatus(isOnline() ? 'error' : 'offline');
     }
-  }, [uid, fetchBatch, prefetchMedia]);
+  }, [uid, fetchBatch, prefetchMedia, savedKey, resignBuffer]);
 
   const fetchMore = useCallback(async () => {
     if (fetchingMore.current) return;
@@ -138,16 +198,42 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
         return prev;
       });
     } catch {
-      // A background refill failure shouldn't blow away a usable buffer; only surface an
-      // error when there's nothing to show.
+      // A background refill failure shouldn't blow away a usable buffer; only surface a
+      // state when there's nothing to show — the calm offline one if the signal is gone.
       setCards((prev) => {
-        if (prev.length === 0) setStatus('error');
+        if (prev.length === 0) setStatus(isOnline() ? 'error' : 'offline');
         return prev;
       });
     } finally {
       fetchingMore.current = false;
     }
   }, [fetchBatch, prefetchMedia]);
+
+  // Signal is back: refresh expired links on restored cards, top the buffer up, or load
+  // a fresh deck if it ran dry — without the user having to tap Retry.
+  useEffect(
+    () =>
+      onConnectivityChange((online) => {
+        if (!online || !uid) return;
+        if (needsResign.current) void resignBuffer();
+        const n = cardsRef.current.length;
+        if (n === 0) {
+          if (statusRef.current === 'offline' || statusRef.current === 'error') void loadInitial();
+        } else if (n <= REFILL_AT) {
+          void fetchMore();
+        }
+      }),
+    [uid, loadInitial, fetchMore, resignBuffer],
+  );
+
+  // Keep the unseen cards on the phone (main feed only) for the next offline launch.
+  useEffect(() => {
+    if (!savedKey || status !== 'ready') return;
+    const t = setTimeout(() => {
+      void writeSavedDeck(savedKey, { savedAt: Date.now(), cards: cards.slice(0, DECK_BATCH_SIZE) });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [cards, status, savedKey]);
 
   // Bootstrap: swipe queue + view-event recorder + first batch, per user.
   useEffect(() => {
@@ -221,7 +307,7 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
       const [last, ...rest] = prev;
       queueRef.current?.enqueueUndo(last.id);
       setCards((cs) => [last, ...cs]);
-      setStatus((s) => (s === 'exhausted' ? 'ready' : s));
+      setStatus((s) => (s === 'exhausted' || s === 'offline' ? 'ready' : s));
       return rest; // up to swipe_undo_depth steps back
     });
   }, []);
@@ -250,4 +336,24 @@ export function useDeck(fetchBatch: FetchBatch): UseDeck {
     retry,
     adjustCommentCount,
   };
+}
+
+async function readSavedDeck(key: string): Promise<SavedDeck | null> {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as SavedDeck;
+    if (!Array.isArray(saved.cards) || Date.now() - saved.savedAt > SAVED_DECK_MAX_AGE_MS) return null;
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+async function writeSavedDeck(key: string, deck: SavedDeck): Promise<void> {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify(deck));
+  } catch {
+    // best effort
+  }
 }

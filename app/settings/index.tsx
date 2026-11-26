@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Application from 'expo-application';
 import { Stack, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { Children, Fragment, isValidElement, useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 
+import { useReportIssue } from '@/components/report-issue';
 import { ThemedText } from '@/components/themed-text';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { ThemedView } from '@/components/themed-view';
@@ -21,7 +22,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { getAdsConsent, setAdsConsent } from '@/lib/ads';
 import { analytics } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth-context';
+import { isBusinessProfile } from '@/lib/account-type';
 import { confirm } from '@/lib/confirm';
+import { isSimulatingOffline, setSimulatedOffline } from '@/lib/connectivity';
 import {
   deleteAccount,
   getHideLikes,
@@ -43,8 +46,11 @@ export default function SettingsScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { profile, reload, signOut, signOutAll } = useAuth();
+  const isBusiness = isBusinessProfile(profile);
+  const reportIssue = useReportIssue();
 
   const [isPrivate, setIsPrivate] = useState(profile?.is_private ?? false);
+  const [simOffline, setSimOffline] = useState(isSimulatingOffline());
   const [privacyPromptOpen, setPrivacyPromptOpen] = useState(false);
   const [approveFollowers, setApproveFollowers] = useState(profile?.require_follow_approval ?? true);
   const [radius, setRadius] = useState(profile?.search_radius_miles ?? 5);
@@ -261,19 +267,37 @@ export default function SettingsScreen() {
               <TriRow label="New followers" value={prefs.follows} onChange={(v) => void setPrefMode('follows', v)} />
               <TriRow label="Follow requests" value={prefs.requests} onChange={(v) => void setPrefMode('requests', v)} />
               <TriRow label="Messages" value={prefs.messages} onChange={(v) => void setPrefMode('messages', v)} />
-              <TriRow label="Boosts & reach" value={prefs.reach} onChange={(v) => void setPrefMode('reach', v)} noFollows />
-              <TriRow label="Posting & collabs" value={prefs.posts} onChange={(v) => void setPrefMode('posts', v)} noFollows />
-              <TriRow label="Earnings, offers & team" value={prefs.business} onChange={(v) => void setPrefMode('business', v)} noFollows />
-              <TriRow
-                label="Weekly creator digest"
-                sublabel="A Monday summary of your week"
-                value={prefs.digest}
-                onChange={(v) => void setPrefMode('digest', v)}
-                noFollows
-              />
+              {isBusiness ? (
+                <>
+                  <TriRow label="Boosts & reach" value={prefs.reach} onChange={(v) => void setPrefMode('reach', v)} noFollows />
+                  <TriRow label="Posting & collabs" value={prefs.posts} onChange={(v) => void setPrefMode('posts', v)} noFollows />
+                  <TriRow label="Earnings, offers & team" value={prefs.business} onChange={(v) => void setPrefMode('business', v)} noFollows />
+                  <TriRow
+                    label="Weekly creator digest"
+                    sublabel="A Monday summary of your week"
+                    value={prefs.digest}
+                    onChange={(v) => void setPrefMode('digest', v)}
+                    noFollows
+                  />
+                </>
+              ) : null}
             </>
           )}
         </Group>
+
+        {__DEV__ ? (
+          <Group title="Developer">
+            <ToggleRow
+              label="Simulate offline"
+              sublabel="Development builds only. The app behaves as if the signal dropped: requests and uploads fail, and posts, messages and swipes wait to send."
+              value={simOffline}
+              onValueChange={(v) => {
+                setSimulatedOffline(v);
+                setSimOffline(v);
+              }}
+            />
+          </Group>
+        ) : null}
 
         <Group title="Help">
           <LinkRow
@@ -290,6 +314,11 @@ export default function SettingsScreen() {
             icon="shield-checkmark-outline"
             label="Community Guidelines"
             onPress={() => router.push('/legal/guidelines')}
+          />
+          <LinkRow
+            icon="bug-outline"
+            label="Report a problem"
+            onPress={() => reportIssue.open('settings-help')}
           />
           <LinkRow
             icon="mail-outline"
@@ -329,24 +358,31 @@ export default function SettingsScreen() {
         </Group>
 
         <Group title="Account">
+          {isBusiness ? (
+            <LinkRow
+              icon="grid-outline"
+              label="Business tools"
+              onPress={() => router.push('/business-tools')}
+            />
+          ) : null}
           <LinkRow
-            icon="construct-outline"
-            label="Creator tools"
+            icon={isBusiness ? 'construct-outline' : 'chatbubble-ellipses-outline'}
+            label={isBusiness ? 'Profile tools' : 'Comment controls'}
             onPress={() => router.push('/settings/creator-tools')}
           />
           <LinkRow
             icon="briefcase-outline"
-            label="Business account"
+            label={isBusiness ? 'Business account' : 'Switch to a business account'}
             onPress={() => router.push('/settings/business')}
           />
-          {(profile as { account_type?: string } | null)?.account_type === 'business' ? (
+          {isBusiness ? (
             <LinkRow
               icon="ribbon-outline"
               label="Partnership requests"
               onPress={() => router.push('/settings/partnerships')}
             />
           ) : null}
-          {profile?.age_band !== 'minor' ? (
+          {isBusiness && profile?.age_band !== 'minor' ? (
             <LinkRow
               icon="cash-outline"
               label="Earnings"
@@ -405,6 +441,11 @@ export default function SettingsScreen() {
             label="Online safety"
             onPress={() => router.push('/legal/safety')}
           />
+          <LinkRow
+            icon="library-outline"
+            label="All legal documents"
+            onPress={() => router.push('/legal')}
+          />
         </Group>
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.version}>
@@ -430,6 +471,7 @@ export default function SettingsScreen() {
           { label: 'Keep them public', onPress: () => {} },
         ]}
       />
+      {reportIssue.activeOpener === 'settings-help' ? reportIssue.renderSheet('settings-help') : null}
     </ThemedView>
   );
 }
@@ -441,9 +483,31 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
       <ThemedText type="smallBold" themeColor="textSecondary" style={styles.groupTitle}>
         {title.toUpperCase()}
       </ThemedText>
-      <View style={[styles.card, { borderColor: theme.border }]}>{children}</View>
+      <View style={[styles.card, { borderColor: theme.border }]}>
+        {flattenRows(children).map((child, i) => (
+          <View key={i}>
+            {i > 0 ? <View style={[styles.divider, { backgroundColor: theme.border }]} /> : null}
+            {child}
+          </View>
+        ))}
+      </View>
     </View>
   );
+}
+
+/** The rows inside a group, with fragments and conditionally-hidden rows flattened out,
+ *  so each visible row gets a divider above it. */
+function flattenRows(children: React.ReactNode): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  Children.forEach(children, (child) => {
+    if (child == null || typeof child === 'boolean') return;
+    if (isValidElement(child) && child.type === Fragment) {
+      out.push(...flattenRows((child.props as { children?: React.ReactNode }).children));
+    } else {
+      out.push(child);
+    }
+  });
+  return out;
 }
 
 // Part 15: On / People I follow / Off, as one-handed chips.
@@ -574,6 +638,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { padding: 16, gap: 22 },
   group: { gap: 8 },
+  divider: { height: StyleSheet.hairlineWidth, marginLeft: 14 },
   groupTitle: { paddingHorizontal: 4, letterSpacing: 0.5 },
   card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
