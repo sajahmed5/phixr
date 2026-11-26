@@ -26,6 +26,11 @@ import { isBusinessProfile } from '@/lib/account-type';
 import { confirm } from '@/lib/confirm';
 import { isSimulatingOffline, setSimulatedOffline } from '@/lib/connectivity';
 import {
+  getThemePreference,
+  setThemePreference,
+  type ThemePreference,
+} from '@/lib/theme-preference';
+import {
   deleteAccount,
   getHideLikes,
   getNotificationPrefs,
@@ -252,6 +257,10 @@ export default function SettingsScreen() {
               </Pressable>
             ))}
           </View>
+        </Group>
+
+        <Group title="Display">
+          <AppearanceRow />
         </Group>
 
         <Group title="Notifications">
@@ -516,6 +525,47 @@ function flattenRows(children: React.ReactNode): React.ReactNode[] {
     }
   });
   return out;
+}
+
+// Light (the default) / Dark / Match system, same chips as the notification rows.
+function AppearanceRow() {
+  const theme = useTheme();
+  const [pref, setPref] = useState<ThemePreference>(getThemePreference());
+  const options: { v: ThemePreference; title: string }[] = [
+    { v: 'light', title: 'Light' },
+    { v: 'dark', title: 'Dark' },
+    { v: 'system', title: 'System' },
+  ];
+  return (
+    <View style={styles.row}>
+      <View style={styles.rowText}>
+        <ThemedText type="default">Appearance</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          System follows your phone&apos;s light or dark setting.
+        </ThemedText>
+      </View>
+      <View style={styles.triChips}>
+        {options.map((o) => (
+          <Pressable
+            key={o.v}
+            accessibilityRole="button"
+            accessibilityLabel={`Appearance: ${o.title}`}
+            accessibilityState={{ selected: pref === o.v }}
+            onPress={() => {
+              setPref(o.v);
+              setThemePreference(o.v);
+            }}
+            style={[
+              styles.triChip,
+              { borderColor: pref === o.v ? BRAND.accent : theme.border },
+              pref === o.v ? styles.triChipOn : null,
+            ]}>
+            <ThemedText type="small">{o.title}</ThemedText>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
 }
 
 // Part 15: On / People I follow / Off, as one-handed chips.
