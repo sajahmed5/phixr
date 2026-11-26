@@ -31,7 +31,7 @@ import { validatePassword, validatePasswordConfirm } from '@/lib/validation';
 type Phase = 'checking' | 'ready' | 'invalid' | 'saving';
 
 function hasResetParams(p: Record<string, string>): boolean {
-  return !!(p.access_token || p.code || p.error || p.error_description);
+  return !!(p.access_token || p.code || p.token_hash || p.error || p.error_description);
 }
 
 function linkParams(url: string): Record<string, string> {
@@ -74,7 +74,11 @@ export default function ResetPasswordScreen() {
       setPhase('invalid');
       return;
     }
-    const { error: sessionError } = p.code
+    // token_hash: the email links straight to joinphixr.com/reset-password (a universal
+    // link, so it opens the app) and we verify here; older emails used code/access_token.
+    const { error: sessionError } = p.token_hash
+      ? await supabase.auth.verifyOtp({ token_hash: p.token_hash, type: 'recovery' })
+      : p.code
       ? await supabase.auth.exchangeCodeForSession(p.code)
       : await supabase.auth.setSession({
           access_token: p.access_token,
