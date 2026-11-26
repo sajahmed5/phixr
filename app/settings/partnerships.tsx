@@ -2,6 +2,7 @@ import { Stack, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, View } from 'react-native';
 
+import { BusinessOnly } from '@/components/business-only';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
@@ -81,19 +82,15 @@ export default function PartnershipsScreen() {
 
   if ((profile as { account_type?: string } | null)?.account_type !== 'business') {
     return (
-      <ThemedView style={styles.center}>
+      <>
         <Stack.Screen options={{ headerShown: true, title: 'Partnerships' }} />
-        <ThemedText type="small" themeColor="textSecondary" style={styles.pad}>
-          Partnership requests are for business accounts. Switch in Settings → Business
-          account to be taggable in creators&apos; paid partnerships.
-        </ThemedText>
-      </ThemedView>
+        <BusinessOnly feature="Partnerships">{null}</BusinessOnly>
+      </>
     );
   }
 
   const watch = (stats?.watch ?? {}) as Record<string, unknown>;
-  const fmtRate = (x: unknown) =>
-    typeof x === 'number' ? `${(x * 100).toFixed(1)}%` : '—';
+  const fmtRate = (x: unknown) => (typeof x === 'number' ? `${(x * 100).toFixed(1)}%` : '—');
 
   return (
     <ThemedView style={styles.fill}>
@@ -109,8 +106,8 @@ export default function PartnershipsScreen() {
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <ThemedText type="small" themeColor="textSecondary" style={styles.pad}>
-              No partnership requests yet. When a creator tags your business on a paid
-              post, it appears here for your approval.
+              No partnership requests yet. When a creator tags your business on a paid post, it
+              appears here for your approval.
             </ThemedText>
           }
           renderItem={({ item }) => (
@@ -168,8 +165,8 @@ export default function PartnershipsScreen() {
               {statsFor === item.post_id && stats ? (
                 <View style={styles.stats}>
                   <ThemedText type="small">
-                    Views {String(watch.views ?? 0)} · Like rate {fmtRate(stats.like_rate)} ·
-                    Quick skips {fmtRate(watch.quick_skip_rate)}
+                    Views {String(watch.views ?? 0)} · Like rate {fmtRate(stats.like_rate)} · Quick
+                    skips {fmtRate(watch.quick_skip_rate)}
                   </ThemedText>
                   {typeof stats.tip === 'string' ? (
                     <ThemedText type="small" themeColor="textSecondary">
@@ -177,8 +174,7 @@ export default function PartnershipsScreen() {
                     </ThemedText>
                   ) : null}
                   <ThemedText type="small" themeColor="textSecondary">
-                    Audience data is anonymous, adults-only and only shown for large
-                    groups.
+                    Audience data is anonymous, adults-only and only shown for large groups.
                   </ThemedText>
                 </View>
               ) : null}

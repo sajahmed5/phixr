@@ -18,7 +18,13 @@ export default function LegalIndexScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <ThemedText type="title">Legal</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          Version {TERMS_VERSION}
+          Last updated{' '}
+          {new Date(`${TERMS_VERSION}T00:00:00Z`).toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+            timeZone: 'UTC',
+          })}
         </ThemedText>
         <View style={[styles.card, { borderColor: theme.border }]}>
           {LEGAL_DOC_LIST.map(({ id, summary }, i) => (

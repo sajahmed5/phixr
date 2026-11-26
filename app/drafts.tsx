@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/use-theme';
+import { useIsBusiness } from '@/lib/account-type';
 import { useOnline } from '@/lib/connectivity';
 import { cancelSchedule, deleteDraft, listDrafts, postNow, scheduleDraft, type Draft } from '@/lib/drafts';
 import { signMediaPaths } from '@/lib/media';
@@ -21,6 +22,7 @@ import type { QueuedPost } from '@/lib/post-outbox';
  */
 export default function DraftsScreen() {
   const theme = useTheme();
+  const isBusiness = useIsBusiness();
   const [rows, setRows] = useState<(Draft & { thumb?: string })[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -78,7 +80,7 @@ export default function DraftsScreen() {
 
   return (
     <ThemedView style={styles.fill}>
-      <Stack.Screen options={{ headerShown: true, title: 'Drafts' }} />
+      <Stack.Screen options={{ headerShown: true, title: isBusiness ? 'Drafts' : 'Waiting to post' }} />
       {rows === null && waiting.length === 0 ? (
         <View style={styles.center}>
           <ActivityIndicator color={theme.textSecondary} />
@@ -118,10 +120,17 @@ export default function DraftsScreen() {
                 You&apos;re offline. Drafts saved to your account will show here when
                 you&apos;re back online.
               </ThemedText>
-            ) : waiting.length > 0 ? null : (
+            ) : waiting.length > 0 ? null : isBusiness ? (
               <ThemedText type="small" themeColor="textSecondary" style={styles.pad}>
                 No drafts yet. Save one from the composer and it syncs to every device
                 you&apos;re signed in on.
+              </ThemedText>
+            ) : (
+              // Personal accounts can't save drafts; this screen only holds posts made
+              // with no signal, waiting to go up.
+              <ThemedText type="small" themeColor="textSecondary" style={styles.pad}>
+                Nothing waiting to post. If you post with no signal, it&apos;s saved here and
+                goes up by itself when you&apos;re back online.
               </ThemedText>
             )
           }

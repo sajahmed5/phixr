@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -83,14 +83,24 @@ export default function NewMessageScreen() {
   }, [busy, selected, groupName]);
 
   return (
-    <ThemedView style={{ flex: 1, paddingTop: insets.top }}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10}><Ionicons name="chevron-back" size={26} color={theme.text} /></Pressable>
-        <ThemedText type="smallBold" style={{ flex: 1, fontSize: 17 }}>{mode === 'group' ? 'New group' : 'New message'}</ThemedText>
-        <Pressable onPress={() => setMode((m) => (m === 'direct' ? 'group' : 'direct'))} hitSlop={8}>
-          <ThemedText type="small" style={{ color: theme.tint, fontWeight: '700' }}>{mode === 'direct' ? 'New group' : 'Direct'}</ThemedText>
-        </Pressable>
-      </View>
+    <ThemedView style={{ flex: 1 }}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          title: mode === 'group' ? 'New group' : 'New message',
+          headerRight: () => (
+            <Pressable
+              onPress={() => setMode((m) => (m === 'direct' ? 'group' : 'direct'))}
+              hitSlop={8}
+              accessibilityRole="button"
+              style={styles.headerAction}>
+              <ThemedText type="small" style={{ color: BRAND.accent, fontWeight: '700' }}>
+                {mode === 'direct' ? 'New group' : 'Direct'}
+              </ThemedText>
+            </Pressable>
+          ),
+        }}
+      />
 
       {mode === 'group' ? (
         <TextInput
@@ -169,7 +179,7 @@ export default function NewMessageScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  headerAction: { paddingHorizontal: 8 },
   groupName: { marginHorizontal: 12, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, borderWidth: 1, fontSize: 15 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 12, paddingBottom: 8 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },

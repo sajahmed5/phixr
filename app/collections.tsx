@@ -97,6 +97,16 @@ export default function CollectionsScreen() {
           data={rows}
           keyExtractor={(c) => c.id}
           contentContainerStyle={styles.content}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="albums-outline" size={36} color={theme.textSecondary} />
+              <ThemedText type="smallBold">Sort your saved posts</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+                Make collections like “Places to eat” or “Outfit ideas”, then pick one when you
+                save a post.
+              </ThemedText>
+            </View>
+          }
           renderItem={({ item, index }) => (
             <View style={[styles.row, { borderColor: theme.border }]}>
               {item.cover_url ? (
@@ -224,6 +234,8 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { padding: 16, gap: 8 },
+  empty: { alignItems: 'center', gap: 8, paddingVertical: 28, paddingHorizontal: 12 },
+  emptyText: { textAlign: 'center' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

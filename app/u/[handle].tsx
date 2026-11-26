@@ -14,6 +14,7 @@ import { ActionMenu } from '@/components/ui/action-menu';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/use-theme';
 import { confirm, notify } from '@/lib/confirm';
+import { ACCOUNT_REPORT_REASONS, confirmReported } from '@/lib/reports';
 import {
   blockUser,
   followUser,
@@ -104,8 +105,8 @@ export default function PublicProfileScreen() {
   const doReport = (reason: string) => {
     if (!overview) return;
     reportUser(overview.id, reason)
-      .then(() => Alert.alert('Thanks', 'Our team will review this.'))
-      .catch(() => {});
+      .then(() => confirmReported(reason, { kind: 'account', handle: overview.handle }))
+      .catch(() => Alert.alert("Couldn't report", 'Please try again in a moment.'));
   };
   const blockFlow = async () => {
     if (!overview) return;
@@ -248,7 +249,7 @@ export default function PublicProfileScreen() {
         visible={reportOpen}
         title="Report this account"
         onClose={() => setReportOpen(false)}
-        options={['Spam', 'Harassment or bullying', 'Inappropriate content'].map((r) => ({
+        options={ACCOUNT_REPORT_REASONS.map((r) => ({
           label: r,
           onPress: () => doReport(r),
         }))}

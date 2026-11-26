@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -86,15 +86,8 @@ export default function TagPage() {
   }, [loadingMore, hasMore, name, markLiked]);
 
   return (
-    <ThemedView style={{ flex: 1, paddingTop: insets.top }}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Back">
-          <Ionicons name="chevron-back" size={26} color={theme.text} />
-        </Pressable>
-        <ThemedText type="smallBold" numberOfLines={1} style={{ flex: 1, fontSize: 17 }}>
-          #{name}
-        </ThemedText>
-      </View>
+    <ThemedView style={{ flex: 1 }}>
+      <Stack.Screen options={{ headerShown: true, title: `#${name}` }} />
 
       <FlatList
         data={posts}
@@ -146,7 +139,6 @@ export default function TagPage() {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
   followBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1, minWidth: 96, alignItems: 'center' },
   gridImg: { flex: 1, borderRadius: 2, backgroundColor: '#222' },

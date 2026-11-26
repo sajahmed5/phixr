@@ -345,7 +345,7 @@ Phixr is for people aged 13 and over. We follow the ICO's Age Appropriate Design
 • Wellbeing: a daily time reminder is on by default, and sensitive-content filters can't be turned off.
 • Clear information: we explain privacy choices in plain language at the point you make them.
 
-If we learn that an account belongs to someone under 13, we delete it. If you think a child under 13 is using Phixr, please tell us at support@joinphixr.com.
+If we learn that an account belongs to someone under 13, we delete it. If you think a child under 13 is using Phixr, please report the account in the app (choose "May be under 13") or tell us at support@joinphixr.com.
 
 8. AUTOMATED DECISIONS AND PROFILING
 We use automated systems in three main ways. None of them involves decisions about you that are made using special category data.
@@ -941,7 +941,7 @@ UK law allows some limited uses of other people's work without permission, known
 Your content is yours. The licence you give us to show it on Phixr is explained in our Terms of Service. We don't claim ownership of your content.
 
 3. REPORTING COPYRIGHT INFRINGEMENT
-If you think content on Phixr infringes your copyright, or the copyright of someone you're authorised to act for, you can flag it in the app using Report (choose the closest reason, such as "Something else"). To make a complete copyright report, email support@joinphixr.com with "Copyright report" in the subject line and include:
+If you think content on Phixr infringes your copyright, or the copyright of someone you're authorised to act for, you can flag it in the app: open the post's Report menu and choose "Uses my work without permission", and the app will offer to start the email for you. To make a complete copyright report, email support@joinphixr.com with "Copyright report" in the subject line and include:
 
 • your full name and contact details (email address, and phone number if you're happy to give it);
 • if you're acting for someone else, who they are and your relationship to them;
@@ -971,12 +971,12 @@ We'll consider your counter-notice and may share it with the person who reported
 We take action against accounts that repeatedly infringe other people's intellectual property. Each valid report may lead to a strike. Accounts that repeatedly infringe will lose features and, in appropriate circumstances, be permanently banned. Strikes removed on a successful counter-notice or appeal don't count.
 
 6. TRADE MARKS
-Don't use someone else's trade mark (such as a brand name or logo) in a way that's likely to confuse people about who is behind an account, post, offer or ad, or suggests a connection or endorsement that doesn't exist. To report trade mark infringement, flag the content in the app and email support@joinphixr.com with "Trade mark report" in the subject line. Include the same information as for a copyright report, plus the trade mark, where it's registered and the registration number.
+Don't use someone else's trade mark (such as a brand name or logo) in a way that's likely to confuse people about who is behind an account, post, offer or ad, or suggests a connection or endorsement that doesn't exist. To report trade mark infringement, flag the content or account in the app (choose "Misuses my brand or trade mark") and email support@joinphixr.com with "Trade mark report" in the subject line. Include the same information as for a copyright report, plus the trade mark, where it's registered and the registration number.
 
 7. IMPERSONATION
 Don't pretend to be someone else, whether a person, brand or organisation. Parody, fan and commentary accounts are allowed if they make clear they're not the real thing, for example in the name and bio.
 
-If someone is impersonating you or your business, report the profile in the app, or email us. If you don't have a Phixr account, email support@joinphixr.com with a link to the profile. We may ask you to prove your identity or that you represent the business. Accounts that impersonate others are removed, and we may reclaim handles that impersonate people or brands.
+If someone is impersonating you or your business, report the profile in the app (choose "Pretending to be me or someone else"), or email us. If you don't have a Phixr account, email support@joinphixr.com with a link to the profile. We may ask you to prove your identity or that you represent the business. Accounts that impersonate others are removed, and we may reclaim handles that impersonate people or brands.
 
 8. FALSE OR ABUSIVE REPORTS
 Only report content you genuinely believe infringes your rights. Making reports you know are false, or using reports to silence legitimate criticism or competition, breaks our terms and may lead to action against your account. It may also make you legally responsible for the harm caused.

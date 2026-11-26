@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 // Importing GestureHandlerRootView here (the root layout expo-router loads first) also
 // registers react-native-gesture-handler's native side effects before any app code runs.
+import { Pressable, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -67,6 +68,26 @@ const NAV_THEME_DARK = {
     border: Colors.dark.border,
   },
 };
+
+/**
+ * "Cancel" in the top-left of sheet-style modal screens. iOS lets you swipe a sheet down,
+ * but plenty of people don't know that; without a visible button these screens looked like
+ * dead ends.
+ */
+function ModalCancel() {
+  const router = useRouter();
+  return (
+    <Pressable
+      onPress={() => router.back()}
+      hitSlop={10}
+      accessibilityRole="button"
+      accessibilityLabel="Cancel"
+      style={{ paddingHorizontal: 8 }}>
+      <Text style={{ color: BRAND.accent, fontSize: 17 }}>Cancel</Text>
+    </Pressable>
+  );
+}
+const modalCancel = () => <ModalCancel />;
 
 function useAuthGuard(status: AuthStatus) {
   const segments = useSegments();
@@ -181,11 +202,11 @@ function RootNavigator() {
       <Stack.Screen name="search" options={{ headerShown: true, title: 'Search' }} />
       <Stack.Screen
         name="compose"
-        options={{ presentation: 'modal', headerShown: true, title: 'New post' }}
+        options={{ presentation: 'modal', headerShown: true, title: 'New post', headerLeft: modalCancel }}
       />
       <Stack.Screen
         name="post/[id]/edit"
-        options={{ presentation: 'modal', headerShown: true, title: 'Edit post' }}
+        options={{ presentation: 'modal', headerShown: true, title: 'Edit post', headerLeft: modalCancel }}
       />
       <Stack.Screen
         name="tutorial"
@@ -205,8 +226,14 @@ function RootNavigator() {
         name="legal/accept"
         options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }}
       />
-      <Stack.Screen name="appeal" options={{ presentation: 'modal', headerShown: true, title: 'Appeal' }} />
-      <Stack.Screen name="add-account" options={{ presentation: 'modal', headerShown: true, title: 'Add account' }} />
+      <Stack.Screen
+        name="appeal"
+        options={{ presentation: 'modal', headerShown: true, title: 'Appeal', headerLeft: modalCancel }}
+      />
+      <Stack.Screen
+        name="add-account"
+        options={{ presentation: 'modal', headerShown: true, title: 'Add account', headerLeft: modalCancel }}
+      />
       <Stack.Screen name="business-tools" options={{ headerShown: true, title: 'Business tools' }} />
       <Stack.Screen name="drafts" options={{ headerShown: true, title: 'Drafts' }} />
       <Stack.Screen name="schedule" options={{ headerShown: true, title: 'Content calendar' }} />

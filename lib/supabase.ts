@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import { AppState, Platform } from 'react-native';
 import 'react-native-url-polyfill/auto';
 
-import { isSimulatingOffline, SimulatedNetworkError } from '@/lib/connectivity';
+import { isSimulatingOffline, reportServerReached, SimulatedNetworkError } from '@/lib/connectivity';
 import { secureStoreAdapter } from '@/lib/secure-store-adapter';
 import type { AppExtra } from '@/types';
 
@@ -30,11 +30,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const SUPABASE_URL = supabaseUrl;
 export const SUPABASE_ANON_KEY = supabaseAnonKey;
 
+// Every response from Supabase (any status) tells lib/connectivity we're online, which
+// un-sticks a NetInfo that wrongly reports "no connection".
 // Development-only: while "simulate offline" is on, every Supabase request fails exactly
 // like a dropped connection. Production builds pass straight through to fetch.
 const offlineAwareFetch: typeof fetch = (input, init) => {
   if (isSimulatingOffline()) return Promise.reject(new SimulatedNetworkError());
-  return fetch(input, init);
+  return fetch(input, init).then((res) => {
+    reportServerReached();
+    return res;
+  });
 };
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

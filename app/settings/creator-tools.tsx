@@ -1,6 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -87,7 +88,9 @@ export default function CreatorToolsScreen() {
         {isBusiness ? (
           <>
             {/* --- Category --- */}
-            <ThemedText type="subtitle">Profile category</ThemedText>
+            <ThemedText type="smallBold" style={styles.heading}>
+              Profile category
+            </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               Shown under your name — e.g. “Food creator” or “Pizza restaurant”.
             </ThemedText>
@@ -109,7 +112,7 @@ export default function CreatorToolsScreen() {
             />
 
             {/* --- Link in bio --- */}
-            <ThemedText type="subtitle" style={styles.sectionTop}>
+            <ThemedText type="smallBold" style={[styles.heading, styles.sectionTop]}>
               Links
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
@@ -181,7 +184,7 @@ export default function CreatorToolsScreen() {
           </>
         ) : null}
         {/* --- Hidden words --- */}
-        <ThemedText type="subtitle" style={styles.sectionTop}>
+        <ThemedText type="smallBold" style={[styles.heading, isBusiness && styles.sectionTop]}>
           Hidden words
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
@@ -191,6 +194,7 @@ export default function CreatorToolsScreen() {
         <View style={styles.toggleRow}>
           <ThemedText type="small">Use the built-in list</ThemedText>
           <Switch
+            trackColor={{ true: BRAND.accent }}
             value={useDefaults}
             onValueChange={(v) => {
               setUseDefaults(v);
@@ -233,7 +237,7 @@ export default function CreatorToolsScreen() {
         />
 
         {/* --- Comment limits --- */}
-        <ThemedText type="subtitle" style={styles.sectionTop}>
+        <ThemedText type="smallBold" style={[styles.heading, styles.sectionTop]}>
           Limit comments
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
@@ -245,23 +249,40 @@ export default function CreatorToolsScreen() {
             ['followers', 'Followers only'],
             ['week_followers', 'People following you for over a week'],
           ] as const
-        ).map(([value, label]) => (
-          <View key={label} style={styles.toggleRow}>
-            <ThemedText type="small">{label}</ThemedText>
-            <Switch
-              value={limit === value}
-              onValueChange={() => {
+        ).map(([value, label]) => {
+          // One choice at a time, so a pick-one list (not switches that look independent).
+          const selected = limit === value;
+          return (
+            <Pressable
+              key={label}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              style={[styles.choiceRow, { borderColor: theme.border }]}
+              onPress={() => {
+                if (selected) return;
+                const prev = limit;
                 setLimit(value);
-                void setCommentLimit(value as never).catch(onError);
-              }}
-            />
-          </View>
-        ))}
+                void setCommentLimit(value as never).catch((e) => {
+                  setLimit(prev);
+                  onError(e);
+                });
+              }}>
+              <ThemedText type="small" style={styles.choiceLabel}>
+                {label}
+              </ThemedText>
+              <Ionicons
+                name={selected ? 'radio-button-on' : 'radio-button-off'}
+                size={22}
+                color={selected ? BRAND.accent : theme.textSecondary}
+              />
+            </Pressable>
+          );
+        })}
 
         {isBusiness ? (
           <>
             {/* --- Quick replies --- */}
-            <ThemedText type="subtitle" style={styles.sectionTop}>
+            <ThemedText type="smallBold" style={[styles.heading, styles.sectionTop]}>
               Quick replies
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
@@ -328,7 +349,16 @@ export default function CreatorToolsScreen() {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   body: { padding: 16, gap: 10, paddingBottom: 48 },
+  heading: { fontSize: 17, lineHeight: 22 },
   sectionTop: { marginTop: 22 },
+  choiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  choiceLabel: { flex: 1 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

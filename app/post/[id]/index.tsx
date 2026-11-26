@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/ui/text-field';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { confirmReported, POST_REPORT_REASONS } from '@/lib/reports';
 import { isBusinessProfile } from '@/lib/account-type';
 import { useAuth } from '@/lib/auth-context';
 import { getPartnershipLabels } from '@/lib/partnerships';
@@ -52,7 +53,6 @@ import {
   getPostDetail,
   getPostExtras,
   getVideoCaptions,
-  POST_REPORT_REASONS,
   reportPost,
   setVideoCaptions,
   type PostDetail,
@@ -265,7 +265,7 @@ export default function PostViewScreen() {
   const doReport = (reason: string) => {
     if (!post) return;
     reportPost(post.id, reason)
-      .then(() => Alert.alert('Thanks for reporting', 'Our team will review this post.'))
+      .then(() => confirmReported(reason, { kind: 'post', id: post.id }))
       .catch(() => Alert.alert("Couldn't report", 'Please try again in a moment.'));
   };
 
