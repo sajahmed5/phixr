@@ -39,7 +39,7 @@ export default function SearchDeckScreen() {
         <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={26} color={theme.text} />
         </Pressable>
-        <ThemedText type="subtitle" numberOfLines={1} style={{ flex: 1 }}>
+        <ThemedText type="smallBold" numberOfLines={1} style={{ flex: 1, fontSize: 17 }}>
           {title}
         </ThemedText>
       </View>

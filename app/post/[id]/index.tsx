@@ -307,7 +307,7 @@ export default function PostViewScreen() {
               hitSlop={8}
               accessibilityRole="link"
               accessibilityLabel={`Open @${post.handle}’s profile`}>
-              <ThemedText type="subtitle">@{post.handle}</ThemedText>
+              <ThemedText type="smallBold" style={{ fontSize: 17 }} numberOfLines={1}>@{post.handle}</ThemedText>
             </Pressable>
           ),
           headerRight: () => (

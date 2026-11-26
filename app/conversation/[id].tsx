@@ -374,6 +374,19 @@ export default function ConversationScreen() {
           )}
         />
 
+        {combined.length === 0 ? (
+          // A brand-new chat: something friendly instead of an empty black screen.
+          <View style={styles.emptyChat} pointerEvents="none">
+            <Ionicons name="chatbubbles-outline" size={40} color={theme.textSecondary} />
+            <ThemedText type="smallBold">
+              {detail?.type === 'group' ? 'Say hello to the group' : `Say hi to ${title || 'them'}`}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
+              Messages you send will appear here.
+            </ThemedText>
+          </View>
+        ) : null}
+
         {typingName ? (
           <ThemedText type="small" themeColor="textSecondary" style={styles.typing}>
             {typingName} is typing…
@@ -675,6 +688,7 @@ function Composer({ text, reply, onChangeText, onSend, onAttach, onCancelReply, 
 }
 
 const styles = StyleSheet.create({
+  emptyChat: { position: 'absolute', top: '30%', left: 32, right: 32, alignItems: 'center', gap: 6 },
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth },

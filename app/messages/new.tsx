@@ -86,7 +86,7 @@ export default function NewMessageScreen() {
     <ThemedView style={{ flex: 1, paddingTop: insets.top }}>
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={10}><Ionicons name="chevron-back" size={26} color={theme.text} /></Pressable>
-        <ThemedText type="subtitle" style={{ flex: 1 }}>{mode === 'group' ? 'New group' : 'New message'}</ThemedText>
+        <ThemedText type="smallBold" style={{ flex: 1, fontSize: 17 }}>{mode === 'group' ? 'New group' : 'New message'}</ThemedText>
         <Pressable onPress={() => setMode((m) => (m === 'direct' ? 'group' : 'direct'))} hitSlop={8}>
           <ThemedText type="small" style={{ color: theme.tint, fontWeight: '700' }}>{mode === 'direct' ? 'New group' : 'Direct'}</ThemedText>
         </Pressable>
