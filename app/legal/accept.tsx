@@ -59,6 +59,11 @@ export default function AcceptTermsScreen() {
             </ThemedText>
           </Pressable>
         </View>
+        <Pressable onPress={() => router.push('/legal')}>
+          <ThemedText type="small" themeColor="textSecondary">
+            See all legal documents
+          </ThemedText>
+        </Pressable>
       </View>
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <Button title="I accept" onPress={accept} loading={busy} />

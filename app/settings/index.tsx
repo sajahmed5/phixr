@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Application from 'expo-application';
 import { Stack, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { Children, Fragment, isValidElement, useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -441,6 +441,11 @@ export default function SettingsScreen() {
             label="Online safety"
             onPress={() => router.push('/legal/safety')}
           />
+          <LinkRow
+            icon="library-outline"
+            label="All legal documents"
+            onPress={() => router.push('/legal')}
+          />
         </Group>
 
         <ThemedText type="small" themeColor="textSecondary" style={styles.version}>
@@ -478,9 +483,31 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
       <ThemedText type="smallBold" themeColor="textSecondary" style={styles.groupTitle}>
         {title.toUpperCase()}
       </ThemedText>
-      <View style={[styles.card, { borderColor: theme.border }]}>{children}</View>
+      <View style={[styles.card, { borderColor: theme.border }]}>
+        {flattenRows(children).map((child, i) => (
+          <View key={i}>
+            {i > 0 ? <View style={[styles.divider, { backgroundColor: theme.border }]} /> : null}
+            {child}
+          </View>
+        ))}
+      </View>
     </View>
   );
+}
+
+/** The rows inside a group, with fragments and conditionally-hidden rows flattened out,
+ *  so each visible row gets a divider above it. */
+function flattenRows(children: React.ReactNode): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  Children.forEach(children, (child) => {
+    if (child == null || typeof child === 'boolean') return;
+    if (isValidElement(child) && child.type === Fragment) {
+      out.push(...flattenRows((child.props as { children?: React.ReactNode }).children));
+    } else {
+      out.push(child);
+    }
+  });
+  return out;
 }
 
 // Part 15: On / People I follow / Off, as one-handed chips.
@@ -611,6 +638,7 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { padding: 16, gap: 22 },
   group: { gap: 8 },
+  divider: { height: StyleSheet.hairlineWidth, marginLeft: 14 },
   groupTitle: { paddingHorizontal: 4, letterSpacing: 0.5 },
   card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },

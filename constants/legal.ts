@@ -128,12 +128,12 @@ When you use Phixr you must follow the Community Guidelines and the law. You mus
 • help or encourage anyone else to do any of these things.
 
 12. POINTS
-Points are a free reward for genuine activity on Phixr. A higher points balance can help your posts reach more people, as explained in Settings → How points work. Points have no cash value. They are not money or property, can't be bought, sold, transferred or exchanged for money, and aren't affected by whether you have a personal or business account.
+Points are a free reward for genuine activity on Phixr. A higher points balance can help your posts reach more people, as explained in Settings → How points work. Everyone earns points the same way, whether they have a personal or business account. Business accounts can also spend points to boost their own posts; if a boost is stopped before it ends, the points for the unused time are returned. Points have no cash value. They are not money or property, and can't be bought, sold, transferred or exchanged for money.
 
 We may adjust or remove points gained through manipulation (such as bots, swipe farms, comment rings or self-dealing), or by mistake. We may change how points are earned or what they do, and we'll explain significant changes in the app.
 
 13. PURCHASES AND PAYMENTS
-Paid features are only available to business accounts. On iPhone, boosts are bought through Apple as in-app purchases, and on Android through Google Play. Apple or Google processes the payment, and their terms and refund processes apply alongside these terms. We never see your card details.
+Paid features are only available to business accounts. Boosts can be paid for with points (see section 12) or, where we offer it, bought as an in-app purchase through Apple on iPhone or Google Play on Android. Apple or Google processes the payment, and their terms and refund processes apply alongside these terms. We never see your card details.
 
 Advertising is paid for from an ad-account balance that you top up by card on the web through our payment provider, Stripe, once card billing is switched on. Top-ups are never taken inside the iPhone app. The Advertising Policy explains how advertising is billed.
 
@@ -797,7 +797,7 @@ Under-18s never receive targeted ads or boosted posts, and never appear in adver
 Brand-safety controls let advertisers keep their ads away from sensitive content.
 
 8. BOOSTS
-A boost shows one of your own posts to more people for the duration or amount shown when you buy it, and is always labelled. Boosts never reach under-18s. A boost doesn't guarantee any particular number of views, likes, follows or sales. On iPhone, boosts are bought through Apple in-app purchase, and Apple's terms and refund process apply. Boost reports follow the same privacy rules as ad reports. Your right to cancel a boost is explained in our Terms of Service.
+A boost shows one of your own posts to more people for the duration or amount shown when you buy it, and is always labelled. Boosts never reach under-18s. A boost doesn't guarantee any particular number of views, likes, follows or sales. Boosts are paid for with points or, where offered, bought as an in-app purchase through Apple or Google Play, in which case their terms and refund processes apply. Boosts are available to business accounts only. Boost reports follow the same privacy rules as ad reports. Your right to cancel a boost is explained in our Terms of Service.
 
 9. PAID PARTNERSHIPS
 If you're paid, gifted a product, given a discount or otherwise rewarded to post about a brand, or if you have a commercial relationship with it, your post is advertising. You must use the in-app "Paid partnership" label so people can tell straight away. We also recommend putting "#ad" at the start of your caption. The brand can approve the label so its name appears. The Business & Creator Terms explain your duties in more detail.
@@ -861,7 +861,7 @@ You can save drafts and schedule posts to publish later. Scheduled posts are che
 A/B tests let you compare different versions of a post. Results are shown as anonymous totals. Everyone who sees a version of the post sees a normal post, labelled in the same way as any other.
 
 6. BOOSTS AND PROMOTION
-Boosts and ads are covered by the Advertising Policy. Boosts are bought through Apple in-app purchase on iPhone, and ads are paid for from your ad-account balance in the ads manager on the web. Boosts and ads never reach under-18s.
+Boosts and ads are covered by the Advertising Policy. Boosts can be paid for with points or, where offered, bought as an in-app purchase through Apple or Google Play. Ads are paid for from your ad-account balance in the ads manager on the web. Boosts and ads never reach under-18s.
 
 7. THE ADS MANAGER
 The ads manager is a website where you can create and manage ads, top up your balance, and see reports. You must keep your login details secure. Everything done in the ads manager under your account or by your team is your responsibility. Ads must follow the Advertising Policy.
