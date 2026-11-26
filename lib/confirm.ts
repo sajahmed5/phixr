@@ -10,14 +10,21 @@ export function notify(title: string, message?: string): void {
 }
 
 /** Cross-platform yes/no confirm. Resolves true if the user confirms. */
-export function confirm(title: string, message?: string, confirmLabel = 'OK'): Promise<boolean> {
+export function confirm(
+  title: string,
+  message?: string,
+  confirmLabel = 'OK',
+  // Red confirm button by default (most confirms here guard a delete/block/leave).
+  // Pass false for harmless confirms such as "Download".
+  destructive = true,
+): Promise<boolean> {
   if (Platform.OS === 'web') {
     return Promise.resolve(typeof window !== 'undefined' && window.confirm(message ?? title));
   }
   return new Promise((resolve) => {
     Alert.alert(title, message, [
       { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-      { text: confirmLabel, style: 'destructive', onPress: () => resolve(true) },
+      { text: confirmLabel, style: destructive ? 'destructive' : 'default', onPress: () => resolve(true) },
     ]);
   });
 }
