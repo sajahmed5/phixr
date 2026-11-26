@@ -15,11 +15,12 @@ import {
 } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
+  Easing,
   runOnJS,
   SlideInDown,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -100,7 +101,8 @@ export function ShareSheet({
         return;
       }
       const target = h.value > (COLLAPSED + EXPANDED) / 2 || e.velocityY < -700 ? EXPANDED : COLLAPSED;
-      h.value = withSpring(target, { damping: 22, stiffness: 220 });
+      // Ease to the snap point; a spring here overshot and wobbled.
+      h.value = withTiming(target, { duration: 220, easing: Easing.out(Easing.cubic) });
     });
   const sheetStyle = useAnimatedStyle(() => ({ height: h.value }));
 
@@ -181,7 +183,8 @@ export function ShareSheet({
         <View style={[styles.overlay, { paddingBottom: keyboard }]}>
           <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
           <Animated.View
-            entering={SlideInDown.springify().damping(22)}
+            // A plain ease-out slide: the old spring bounced several times before settling.
+            entering={SlideInDown.duration(260).easing(Easing.out(Easing.cubic))}
             style={[styles.sheet, sheetStyle, { borderColor: theme.border, backgroundColor: theme.background }]}>
             {/* Drag the grabber to resize/maximise. */}
             <GestureDetector gesture={pan}>
