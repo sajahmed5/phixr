@@ -107,6 +107,8 @@ export async function listDrafts(): Promise<Draft[]> {
   const { data, error } = await supabase
     .from('post_drafts')
     .select('id, kind, payload, media_status, status, scheduled_at, failure_reason, autosave, updated_at')
+    // Practice posts from test-mode Publishing API apps never show in the app.
+    .eq('api_test', false)
     .neq('status', 'published')
     .order('updated_at', { ascending: false });
   if (error) throw error;
@@ -141,6 +143,8 @@ export async function listScheduled(): Promise<Draft[]> {
   const { data, error } = await supabase
     .from('post_drafts')
     .select('id, kind, payload, media_status, status, scheduled_at, failure_reason, autosave, updated_at')
+    // Practice posts from test-mode Publishing API apps never show in the app.
+    .eq('api_test', false)
     .in('status', ['scheduled', 'held', 'failed', 'publishing'])
     .order('scheduled_at', { ascending: true });
   if (error) throw error;

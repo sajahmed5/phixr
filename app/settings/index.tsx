@@ -383,6 +383,13 @@ export default function SettingsScreen() {
               onPress={() => router.push('/settings/partnerships')}
             />
           ) : null}
+          {isBusiness ? (
+            <LinkRow
+              icon="link-outline"
+              label="Connected apps"
+              onPress={() => router.push('/settings/connected-apps')}
+            />
+          ) : null}
           {isBusiness && profile?.age_band !== 'minor' ? (
             <LinkRow
               icon="cash-outline"
