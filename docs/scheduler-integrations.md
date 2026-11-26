@@ -1,6 +1,30 @@
 # Getting Phixr into Metricool (and other post schedulers)
 
-*Recommendation, 26 Nov 2026. Nothing has been built. This is a plan for Saj to approve.*
+*Recommendation, 26 Nov 2026.*
+
+> **Decided by Saj (26 Nov 2026):** v1 = **posting + insights** (no comments, DMs, likes,
+> follows) · **anyone can sign up and test, we approve going live** · **start now, in stages**:
+> (1) connect sign-in + posting, (2) our own Zapier app, (3) insights + webhooks,
+> (4) developer site and docs.
+
+> **Progress (26 Nov 2026): stage 1 is built and live on the backend.** Outside apps can
+> connect a business account ("Connect to Phixr" screen), upload media, and create, schedule,
+> edit and delete posts, with all of Phixr's checks still applied. Test mode and the
+> Settings → Connected apps screen are in place. Developer reference:
+> [publishing-api.md](publishing-api.md). It was tested end to end with the `phixr_brand`
+> test account; one followers-only live post was published and deleted again.
+>
+> **Still to do before a scheduler can use it:**
+> 1. **Merge the PR**, so the consent page and Connected apps reach joinphixr.com and the app.
+>    The same PR fixes joinphixr.com, which was showing a blank page.
+> 2. **Developer Terms** (Saj + solicitor). This is the "agreed in writing" that Terms of
+>    Service section 11 needs. Also the "Connected apps" wording for the Business & Creator
+>    Terms and the Privacy Policy, listed below.
+> 3. **Universal links:** on iPhone, `joinphixr.com/oauth/*` should open in the browser, not
+>    the app, so the scheduler's sign-in window isn't interrupted. This needs a small change
+>    to the apple-app-site-association file in the fame-admin repo.
+> 4. Stage 2 (our Zapier app), stage 3 (insights and webhooks), stage 4 (developer site, and
+>    app approval in the admin portal).
 
 ## The short answer
 

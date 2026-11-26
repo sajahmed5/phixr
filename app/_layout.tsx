@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 // Importing GestureHandlerRootView here (the root layout expo-router loads first) also
 // registers react-native-gesture-handler's native side effects before any app code runs.
-import { Pressable, Text } from 'react-native';
+import { Platform, Pressable, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -89,6 +89,31 @@ function ModalCancel() {
 }
 const modalCancel = () => <ModalCancel />;
 
+// The "Connect to Phixr" consent page (Publishing API) is opened by outside apps on the
+// web, often by someone who isn't signed in yet. Remember it across the login detour so
+// they land back on it, with all its parameters, instead of on the feed.
+const OAUTH_RETURN_KEY = 'phixr:oauth-return';
+function rememberOAuthReturn() {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+  try {
+    if (window.location.pathname.startsWith('/oauth/')) {
+      window.sessionStorage.setItem(OAUTH_RETURN_KEY, window.location.pathname + window.location.search);
+    }
+  } catch {
+    // storage blocked: they'll land on the feed and can start again from the app
+  }
+}
+function takeOAuthReturn(): string | null {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+  try {
+    const v = window.sessionStorage.getItem(OAUTH_RETURN_KEY);
+    window.sessionStorage.removeItem(OAUTH_RETURN_KEY);
+    return v && v.startsWith('/oauth/') ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 function useAuthGuard(status: AuthStatus) {
   const segments = useSegments();
   const router = useRouter();
@@ -103,13 +128,19 @@ function useAuthGuard(status: AuthStatus) {
     const signupStep = parts[2];
 
     if (status === 'signedOut') {
-      if (!inAuth) router.replace('/(auth)/login');
+      if (!inAuth) {
+        if (parts[0] === 'oauth') rememberOAuthReturn();
+        router.replace('/(auth)/login');
+      }
     } else if (status === 'needsProfile') {
       if (!(inSignup && signupStep === 'identity')) router.replace('/(auth)/signup/identity');
     } else if (status === 'onboarding') {
       if (!inOnboarding) router.replace('/(onboarding)/tags');
     } else if (status === 'ready') {
-      if (inAuth || inOnboarding) router.replace('/(tabs)');
+      if (inAuth || inOnboarding) {
+        const back = takeOAuthReturn();
+        router.replace((back ?? '/(tabs)') as '/(tabs)');
+      }
     }
   }, [status, segments, router]);
 }
@@ -239,6 +270,8 @@ function RootNavigator() {
       <Stack.Screen name="schedule" options={{ headerShown: true, title: 'Content calendar' }} />
       <Stack.Screen name="settings/creator-tools" options={{ headerShown: true }} />
       <Stack.Screen name="settings/sessions" options={{ headerShown: true, title: 'Devices & sessions' }} />
+      <Stack.Screen name="settings/connected-apps" options={{ headerShown: true, title: 'Connected apps' }} />
+      <Stack.Screen name="oauth/authorize" options={{ headerShown: true, title: 'Connect an app' }} />
       <Stack.Screen name="recover" options={{ headerShown: true, title: 'Account recovery' }} />
     </Stack>
   );
