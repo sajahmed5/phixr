@@ -385,6 +385,8 @@ These are the main service providers (processors) we use, what they do and where
 
 Supabase — our database, authentication and file storage. Data is hosted in the EU (Ireland).
 
+Cloudflare — stores copies of photos and videos (in the EU) and delivers them to your device. To make them load quickly, Cloudflare's network may briefly cache them in data centres near the people viewing them, which can be outside the UK and EEA.
+
 Sentry — crash and error reports, with identifiers, email addresses and tokens removed. Processed in the EU (Germany).
 
 PostHog — optional usage analytics, which you can switch off in Settings. Processed in the EU.
@@ -402,7 +404,7 @@ Stripe — planned: advertiser card billing and creator payouts, once switched o
 We may change providers from time to time. If we add a provider that changes how your data is handled in a significant way, we'll update this policy.
 
 12. INTERNATIONAL TRANSFERS
-Most of your data is stored in the European Economic Area (EEA), which the UK recognises as providing adequate protection for personal data. Some providers, such as push-notification services and Google Cloud, may process data in other countries, including the United States, and some providers based outside the UK may access data from other countries to support and secure their services.
+Most of your data is stored in the European Economic Area (EEA), which the UK recognises as providing adequate protection for personal data. Some providers, such as push-notification services, Google Cloud and Cloudflare's delivery network, may process data in other countries, including the United States, and some providers based outside the UK may access data from other countries to support and secure their services.
 
 Whenever personal data is transferred outside the UK and EEA, we make sure it is protected by an appropriate safeguard. That means either a UK adequacy regulation (for example, the UK Extension to the EU-US Data Privacy Framework, where the recipient is certified), or a contract approved for UK transfers: the International Data Transfer Agreement (IDTA), or the UK Addendum to the EU Standard Contractual Clauses. You can ask us for more information about these safeguards.
 
