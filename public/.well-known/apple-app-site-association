@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TDHZ6G2S84.com.phixr.app"],
+        "components": [
+          { "/": "/oauth/*", "exclude": true, "comment": "Connect to Phixr runs in the browser so outside apps' sign-in windows aren't interrupted" },
+          { "/": "/post/*", "comment": "A post" },
+          { "/": "/u/*", "comment": "A profile" }
+        ]
+      }
+    ]
+  }
+}
