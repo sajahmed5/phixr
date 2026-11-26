@@ -37,7 +37,6 @@ type SwipeDeckProps = {
   onOpenTag: (tag: string) => void;
   canUndo: boolean;
   onUndo: () => void;
-  onMenu: (card: DeckCard) => void;
   hideCounts?: boolean;
 };
 
@@ -58,7 +57,6 @@ export function SwipeDeck({
   onOpenTag,
   canUndo,
   onUndo,
-  onMenu,
   hideCounts,
 }: SwipeDeckProps) {
   const { width, height } = useWindowDimensions();
@@ -93,7 +91,6 @@ export function SwipeDeck({
           onOpenTag={onOpenTag}
           canUndo={canUndo}
           onUndo={onUndo}
-          onMenu={onMenu}
           hideCounts={hideCounts}
         />
       ) : null}
@@ -113,7 +110,6 @@ export function SwipeDeck({
           onOpenTag={onOpenTag}
           canUndo={canUndo}
           onUndo={onUndo}
-          onMenu={onMenu}
           hideCounts={hideCounts}
         />
       ) : null}
@@ -135,7 +131,6 @@ type DeckCardViewProps = {
   onOpenTag: (tag: string) => void;
   canUndo: boolean;
   onUndo: () => void;
-  onMenu: (card: DeckCard) => void;
   hideCounts?: boolean;
 };
 
@@ -153,7 +148,6 @@ function DeckCardView({
   onOpenTag,
   canUndo,
   onUndo,
-  onMenu,
   hideCounts,
 }: DeckCardViewProps) {
   // Carousel page for this card. Per-card state, so it resets naturally when the card
@@ -315,7 +309,6 @@ function DeckCardView({
         onOpenTag={isTop ? onOpenTag : undefined}
         canUndo={isTop ? canUndo : undefined}
         onUndo={isTop ? onUndo : undefined}
-        onMenu={isTop && !card.is_ad ? () => onMenu(card) : undefined}
         hideCounts={hideCounts}
       />
       {isTop ? (

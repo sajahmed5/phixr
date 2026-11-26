@@ -30,7 +30,6 @@ export const SwipeCard = memo(function SwipeCard({
   onOpenTag,
   canUndo,
   onUndo,
-  onMenu,
   hideCounts,
 }: {
   card: DeckCard;
@@ -47,8 +46,6 @@ export const SwipeCard = memo(function SwipeCard({
   onOpenTag?: (tag: string) => void;
   canUndo?: boolean;
   onUndo?: () => void;
-  /** Part 14A: card options (not interested / show more). */
-  onMenu?: () => void;
   /** Part 14D: viewer hides like counts on other people's posts. */
   hideCounts?: boolean;
 }) {
@@ -105,16 +102,6 @@ export const SwipeCard = memo(function SwipeCard({
             {formatCount(card.comment_count)}
           </ThemedText>
         </Pressable>
-        {onMenu ? (
-          <Pressable
-            onPress={onMenu}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Post options"
-            style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.6 }]}>
-            <Ionicons name="ellipsis-horizontal" size={20} color={BRAND.accent} style={styles.railIcon} />
-          </Pressable>
-        ) : null}
         {onUndo ? (
           <Pressable
             onPress={onUndo}
@@ -136,7 +123,7 @@ export const SwipeCard = memo(function SwipeCard({
           itself passes touches through to the media (double-tap to like), while its
           interactive children (avatar, handle, tags) still receive their taps. */}
       <View
-        style={[styles.bottomScrim, { paddingBottom: insets.bottom + (hasTabBar ? TAB_BAR_CLEARANCE : 10) }]}
+        style={[styles.bottomScrim, { paddingBottom: hasTabBar ? TAB_BAR_CLEARANCE : insets.bottom + 10 }]}
         pointerEvents="box-none"
         onLayout={(e) => setScrimBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
         {/* Slim, soft fade instead of the old solid band (#23): a Skia gradient (no new

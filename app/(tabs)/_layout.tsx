@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useState } from 'react';
 import { Platform } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CameraTabButton } from '@/components/camera-tab-button';
 import { PhixrLockup } from '@/components/brand/phixr-logo';
@@ -20,7 +19,6 @@ import { useNotifications } from '@/lib/notifications-provider';
 export default function TabsLayout() {
   const theme = useTheme();
   const scheme = useColorScheme();
-  const insets = useSafeAreaInsets();
   useInboxBadgeUpdater();
   const inboxBadge = useInboxBadge();
   // #28: notifications live under Profile (the bell is in its header), so the tab
@@ -46,14 +44,17 @@ export default function TabsLayout() {
           position: 'absolute',
           left: TAB_BAR.side,
           right: TAB_BAR.side,
-          // Half the old gap (home-indicator inset + padding): the bar sat too high on
-          // iPhones. Phones without a bottom inset keep the minimum padding.
-          bottom: Math.max(TAB_BAR.bottom, Math.round((insets.bottom + TAB_BAR.bottom) / 2)),
+          // A fixed gap from the screen edge, level with the iPhone home indicator. Don't
+          // derive it from insets.bottom: that floated the pill 19-38pt up.
+          bottom: TAB_BAR.bottom,
           height: TAB_BAR.height,
           borderRadius: TAB_BAR.height / 2,
           backgroundColor: TAB_BAR_FILL[scheme === 'dark' ? 'dark' : 'light'],
           borderTopWidth: 0,
           paddingHorizontal: 6,
+          // The tab bar pads itself by insets.bottom (34pt on iPhone) for a docked bar.
+          // Inside a 60pt floating pill that squeezed the icons upward, so turn it off.
+          paddingBottom: 0,
           ...Platform.select({
             web: { boxShadow: '0px 6px 20px rgba(0,0,0,0.18)' },
             default: {

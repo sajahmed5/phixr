@@ -18,7 +18,6 @@ import {
   type ViewToken,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CollectionPicker } from '@/components/collection-picker';
 import { CommentSheet } from '@/components/comments/comment-sheet';
@@ -48,7 +47,6 @@ const PAGE = 15;
  * (brief 2A); comment/share reuse the shared sheets.
  */
 export function FollowingFeed() {
-  const insets = useSafeAreaInsets();
   const theme = useTheme();
   const [cards, setCards] = useState<DeckCard[] | null>(null); // null = first load
   const [refreshing, setRefreshing] = useState(false);
@@ -133,7 +131,7 @@ export function FollowingFeed() {
         keyExtractor={(c) => c.id}
         ListHeaderComponent={<StoriesRail />}
         ListEmptyComponent={<FollowingEmpty onReload={refresh} />}
-        contentContainerStyle={{ paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }}
+        contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={theme.textSecondary} />
         }
