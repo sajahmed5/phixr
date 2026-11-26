@@ -1,3 +1,4 @@
+import { getClientSettings, settingNumber } from '@/lib/settings';
 import { supabase } from '@/lib/supabase';
 import type { DeckCard } from '@/lib/deck';
 
@@ -13,19 +14,44 @@ export function isStoragePath(value: string): boolean {
   return !!value && !/^https?:\/\//i.test(value) && !value.startsWith('data:');
 }
 
-/** Batch-sign object keys. Returns a key→signed-URL map; unreadable keys are omitted. */
+/**
+ * Batch-sign object keys. Returns a key→signed-URL map; unreadable keys are omitted.
+ *
+ * With the server's `media_cdn_enabled` switch on, keys already copied to Cloudflare R2
+ * get links on media.phixrcdn.com (sign_media: same visibility rules, 24h links, no
+ * download fees). Anything else — not copied yet, or R2 switched off — is signed by
+ * Supabase Storage exactly as before, so nothing breaks mid-move.
+ */
 export async function signMediaPaths(paths: string[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   const unique = [...new Set(paths.filter(isStoragePath))];
   if (unique.length === 0) return map;
+
+  if (await mediaCdnEnabled()) {
+    const { data } = await supabase.rpc('sign_media', { _keys: unique });
+    for (const row of (data ?? []) as { key: string; url: string }[]) {
+      if (row.key && row.url) map.set(row.key, row.url);
+    }
+  }
+
+  const rest = unique.filter((k) => !map.has(k));
+  if (rest.length === 0) return map;
   const { data, error } = await supabase.storage
     .from(MEDIA_BUCKET)
-    .createSignedUrls(unique, SIGNED_URL_TTL);
+    .createSignedUrls(rest, SIGNED_URL_TTL);
   if (error || !data) return map;
   for (const row of data) {
     if (row.signedUrl && row.path) map.set(row.path, row.signedUrl);
   }
   return map;
+}
+
+async function mediaCdnEnabled(): Promise<boolean> {
+  try {
+    return settingNumber(await getClientSettings(), 'media_cdn_enabled', 0) >= 1;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -63,8 +89,9 @@ export async function resolveDeckMedia(cards: DeckCard[]): Promise<DeckCard[]> {
   });
 }
 
-// .../storage/v1/object/sign/media/<path>?token=...
-const SIGNED_MEDIA_RE = /\/storage\/v1\/object\/sign\/media\/([^?]+)/;
+// .../storage/v1/object/sign/media/<path>?token=...  (Supabase Storage)
+// https://media.phixrcdn.com/m/<path>?e=...&s=...    (Cloudflare R2)
+const SIGNED_MEDIA_RE = /(?:\/storage\/v1\/object\/sign\/media\/|^https:\/\/media\.phixrcdn\.com\/m\/)([^?]+)/;
 
 /** The bucket path behind a signed media URL (or the value unchanged if it isn't one). */
 export function storagePathFromUrl(url: string): string {
