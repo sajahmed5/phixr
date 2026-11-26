@@ -5,7 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { LEGAL_DOCS, type LegalDocId } from '@/constants/legal';
 
-/** Renders a legal document (terms / privacy / guidelines) from constants/legal.ts. */
+/** Renders one legal document from constants/legal.ts (the list lives at /legal). */
 export default function LegalScreen() {
   const { doc } = useLocalSearchParams<{ doc: string }>();
   const entry = LEGAL_DOCS[doc as LegalDocId] ?? LEGAL_DOCS.terms;
