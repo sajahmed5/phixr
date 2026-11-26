@@ -522,9 +522,9 @@ We have zero tolerance for anything that sexualises, exploits or endangers child
 Be thoughtful when you post images of children, including your own. Don't post images of other people's children without a parent's or guardian's permission, and never share images of children in a state of undress.
 
 3. NUDITY AND SEXUAL CONTENT
-Phixr isn't a place for pornography or sexually explicit content. We remove explicit sexual activity, close-ups of genitals and sexual solicitation, including offering or asking for sexual services.
+Phixr doesn't allow nudity or sexual content. We remove photos and videos that show nudity (including in art or protest), sexual activity, sexually suggestive poses or close-ups, and sexual solicitation, including offering or asking for sexual services.
 
-Some nudity is allowed in artistic, educational, documentary and health contexts, such as breastfeeding, art, protest or medical information. Borderline content may be marked as sensitive. Sensitive content is hidden from under-18s entirely and covered for adults until they choose to view it.
+Breastfeeding, swimwear and medical or health information are fine, as long as no genitals, buttocks or female nipples are shown. Borderline content may be marked as sensitive. Sensitive content is hidden from under-18s entirely and covered for adults until they choose to view it.
 
 Never share intimate images of anyone without their consent, or threaten to. This is a criminal offence. If it has happened to you, report it in the app and contact the Revenge Porn Helpline (revengepornhelpline.org.uk).
 
@@ -589,7 +589,7 @@ Reports and automated checks are reviewed by a combination of automated tools an
 You can appeal any removal, strike or account decision in the app, and appeals are reviewed by a person. Our moderation numbers are published in the transparency report in the app.
 
 18. CONTEXT MATTERS
-We look at context when we apply these guidelines. Content that would otherwise break a rule may sometimes be allowed if it's clearly newsworthy, educational, documentary, satirical or artistic, and doesn't put anyone at risk. We may still mark it as sensitive or hide it from under-18s.
+We look at context when we apply these guidelines. Content that would otherwise break a rule may sometimes be allowed if it's clearly newsworthy, educational, documentary, satirical or artistic, and doesn't put anyone at risk. We may still mark it as sensitive or hide it from under-18s. The nudity rule in section 3 applies whatever the context.
 
 These guidelines will change as Phixr grows. We'll tell you about significant changes in the app.`,
   },
