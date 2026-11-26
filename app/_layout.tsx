@@ -17,6 +17,8 @@ import { UploadBanner } from '@/components/upload-banner';
 import { TERMS_VERSION } from '@/constants/legal';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { analytics, track } from '@/lib/analytics';
+// Side-effect import: starts listening for incoming links at launch (password reset).
+import '@/lib/incoming-link';
 import { loadMutePreference } from '@/lib/mute-preference';
 import { awardActiveDay } from '@/lib/points';
 import { AuthProvider, useAuth, type AuthStatus } from '@/lib/auth-context';
@@ -97,6 +99,9 @@ function useAuthGuard(status: AuthStatus) {
     if (status === 'loading') return;
 
     const parts = segments as string[];
+    // Mid password reset: the screen manages its own session (signed out until the
+    // email link's recovery session starts), so never redirect away from it.
+    if (parts[0] === 'reset-password') return;
     const inAuth = parts[0] === '(auth)';
     const inSignup = inAuth && parts[1] === 'signup';
     const inOnboarding = parts[0] === '(onboarding)';
@@ -117,6 +122,8 @@ function useAuthGuard(status: AuthStatus) {
 function RootNavigator() {
   const { status, user, profile } = useAuth();
   const router = useRouter();
+  const segments = useSegments();
+  const resettingPassword = (segments as string[])[0] === 'reset-password';
   useAuthGuard(status);
   const tutorialShown = useRef(false);
   const termsShown = useRef(false);
@@ -135,6 +142,8 @@ function RootNavigator() {
   // version is behind the current one, require re-acceptance once. New signups accept the
   // current version at signup, so they are not prompted.
   useEffect(() => {
+    // Not over the "choose a new password" screen; they show once it's done.
+    if (resettingPassword) return;
     if (status === 'ready' && profile && profile.terms_version !== TERMS_VERSION && !termsShown.current) {
       termsShown.current = true;
       router.push('/legal/accept');
@@ -151,7 +160,7 @@ function RootNavigator() {
       tutorialShown.current = true;
       router.push('/tutorial');
     }
-  }, [status, profile, router]);
+  }, [status, profile, router, resettingPassword]);
 
   useEffect(() => {
     // Keep the splash up until we know where to send the user, so protected screens
@@ -226,6 +235,7 @@ function RootNavigator() {
         name="legal/accept"
         options={{ presentation: 'fullScreenModal', headerShown: false, gestureEnabled: false }}
       />
+      <Stack.Screen name="reset-password" options={{ headerShown: false, gestureEnabled: false }} />
       <Stack.Screen
         name="appeal"
         options={{ presentation: 'modal', headerShown: true, title: 'Appeal', headerLeft: modalCancel }}

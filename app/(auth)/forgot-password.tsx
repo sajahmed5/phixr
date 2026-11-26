@@ -33,8 +33,8 @@ export default function ForgotPasswordScreen() {
     if (validateEmail(email) || cooldown.active) return;
 
     setSubmitting(true);
-    // redirectTo lets the emailed link reopen the app; completing the reset (setting a new
-    // password from the deep link) is a follow-up task.
+    // redirectTo makes the emailed link reopen the app on /reset-password, where the
+    // person chooses a new password (app/reset-password.tsx).
     const redirectTo = Linking.createURL('/reset-password');
     const { error: resetError } = await sendPasswordReset(email, redirectTo);
     setSubmitting(false);
