@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BRAND } from '@/constants/config';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
@@ -273,7 +274,7 @@ export default function SearchScreen() {
               style={[
                 styles.toggle,
                 { borderColor: theme.border },
-                active && { backgroundColor: theme.tint, borderColor: theme.tint },
+                active && { backgroundColor: BRAND.accent, borderColor: BRAND.accent },
               ]}>
               <ThemedText type="small" style={{ color: active ? '#fff' : theme.textSecondary, fontWeight: '700' }}>
                 {m.label}
@@ -317,7 +318,7 @@ export default function SearchScreen() {
                 style={[
                   styles.filterChip,
                   { borderColor: theme.border },
-                  on && { backgroundColor: theme.tint, borderColor: theme.tint },
+                  on && { backgroundColor: BRAND.accent, borderColor: BRAND.accent },
                 ]}>
                 <ThemedText type="small" style={{ color: on ? '#fff' : theme.textSecondary, fontWeight: '600' }}>
                   {c.label}
@@ -520,7 +521,7 @@ function RelocationBar({
             <Pressable
               key={r}
               onPress={() => onRadius(r)}
-              style={[styles.chip, { borderColor: theme.border }, active && { backgroundColor: theme.tint, borderColor: theme.tint }]}>
+              style={[styles.chip, { borderColor: theme.border }, active && { backgroundColor: BRAND.accent, borderColor: BRAND.accent }]}>
               <ThemedText type="small" style={{ color: active ? '#fff' : theme.textSecondary }}>
                 {r} mi
               </ThemedText>
@@ -668,7 +669,7 @@ function AccountRow({ account, onOpen }: { account: AccountHit; onOpen: (a: Acco
         disabled={busy}
         style={[
           styles.followBtn,
-          filled ? { backgroundColor: theme.tint, borderColor: theme.tint } : { borderColor: theme.border },
+          filled ? { backgroundColor: BRAND.accent, borderColor: BRAND.accent } : { borderColor: theme.border },
         ]}>
         <ThemedText type="small" style={{ color: filled ? '#fff' : theme.text, fontWeight: '700' }}>
           {label}

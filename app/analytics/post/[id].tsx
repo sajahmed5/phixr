@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { formatCount } from '@/lib/format';
 import { getPostInsights, type PostInsights } from '@/lib/profile';
 
 /**
@@ -218,8 +219,10 @@ function formatSeconds(s: number): string {
 function Stat({ label, value, text }: { label: string; value?: number; text?: string }) {
   return (
     <View style={styles.stat}>
-      <ThemedText type="subtitle">{text ?? Number(value ?? 0).toLocaleString()}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
+      <ThemedText type="subtitle" style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+        {text ?? formatCount(Number(value ?? 0))}
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary" numberOfLines={2} style={styles.statLabel}>
         {label}
       </ThemedText>
     </View>
@@ -276,6 +279,8 @@ function Section({
 }
 
 const styles = StyleSheet.create({
+  statValue: { fontSize: 20, lineHeight: 26, fontWeight: '700' },
+  statLabel: { textAlign: 'center' },
   fill: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
   content: { padding: 20, gap: 24 },

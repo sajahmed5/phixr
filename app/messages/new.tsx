@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BRAND } from '@/constants/config';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
@@ -159,7 +160,7 @@ export default function NewMessageScreen() {
       )}
 
       {mode === 'group' ? (
-        <Pressable onPress={createTheGroup} disabled={busy || selected.length === 0} style={[styles.createBtn, { backgroundColor: selected.length ? theme.tint : theme.backgroundElement, marginBottom: insets.bottom + 10 }]}>
+        <Pressable onPress={createTheGroup} disabled={busy || selected.length === 0} style={[styles.createBtn, { backgroundColor: selected.length ? BRAND.accent : theme.backgroundElement, marginBottom: insets.bottom + 10 }]}>
           {busy ? <ActivityIndicator color="#fff" /> : <ThemedText type="smallBold" style={{ color: selected.length ? '#fff' : theme.textSecondary }}>Create group ({selected.length})</ThemedText>}
         </Pressable>
       ) : null}

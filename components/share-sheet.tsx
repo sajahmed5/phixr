@@ -23,7 +23,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BRAND } from '@/constants/config';
 import { ThemedText } from '@/components/themed-text';
+import { useKeyboardHeight } from '@/lib/use-keyboard-height';
 import { CollectionPicker } from '@/components/collection-picker';
 import { ReportFab } from '@/components/report-issue';
 import { ActionMenu } from '@/components/ui/action-menu';
@@ -51,6 +53,8 @@ export function ShareSheet({
   onClose: () => void;
 }) {
   const theme = useTheme();
+  // Keep the message box and Send button above the keyboard.
+  const keyboard = useKeyboardHeight();
   const insets = useSafeAreaInsets();
   const { height: winH } = useWindowDimensions();
   const { user } = useAuth();
@@ -173,7 +177,7 @@ export function ShareSheet({
   return (
     <Modal transparent visible animationType="fade" onRequestClose={onClose}>
       <GestureHandlerRootView style={styles.flex}>
-        <View style={styles.overlay}>
+        <View style={[styles.overlay, { paddingBottom: keyboard }]}>
           <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close" />
           <Animated.View
             entering={SlideInDown.springify().damping(22)}
@@ -240,7 +244,7 @@ export function ShareSheet({
               {selected.size > 0 ? (
                 <View style={styles.sendRow}>
                   <TextInput value={message} onChangeText={setMessage} placeholder="Add a message…" placeholderTextColor={theme.textSecondary} style={[styles.msgInput, { backgroundColor: theme.backgroundElement, color: theme.text }]} />
-                  <Pressable onPress={send} disabled={sending} style={[styles.sendBtn, { backgroundColor: theme.tint }]}>
+                  <Pressable onPress={send} disabled={sending} style={[styles.sendBtn, { backgroundColor: BRAND.accent }]}>
                     {sending ? <ActivityIndicator color="#fff" /> : <ThemedText type="smallBold" style={{ color: '#fff' }}>{sent ? 'Sent ✓' : `Send (${selected.size})`}</ThemedText>}
                   </Pressable>
                 </View>

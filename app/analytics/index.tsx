@@ -9,6 +9,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { formatCount } from '@/lib/format';
 import { useAuth } from '@/lib/auth-context';
 import { cancelBoost, getMyBoosts, type MyBoost } from '@/lib/boosts';
 import { getBusinessInsights, type BusinessInsights } from '@/lib/business';
@@ -425,7 +426,9 @@ function Section({
 function BigStat({ label, value }: { label: string; value: number }) {
   return (
     <View style={styles.bigStat}>
-      <ThemedText type="title">{Number(value).toLocaleString()}</ThemedText>
+      <ThemedText type="title" style={styles.bigValue} numberOfLines={1} adjustsFontSizeToFit>
+        {formatCount(Number(value))}
+      </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
         {label}
       </ThemedText>
@@ -435,6 +438,7 @@ function BigStat({ label, value }: { label: string; value: number }) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  bigValue: { fontSize: 28, lineHeight: 34 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
   content: { padding: 20, gap: 28 },
   statRow: { flexDirection: 'row', justifyContent: 'space-between' },

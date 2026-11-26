@@ -3,7 +3,15 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { CollectionPicker } from '@/components/collection-picker';
@@ -16,6 +24,7 @@ import { VideoOverlays } from '@/components/video-overlays';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ActionMenu } from '@/components/ui/action-menu';
+import { BottomSheet } from '@/components/ui/bottom-sheet';
 import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/ui/text-field';
 import { BRAND } from '@/constants/config';
@@ -24,8 +33,12 @@ import { isBusinessProfile } from '@/lib/account-type';
 import { useAuth } from '@/lib/auth-context';
 import { getPartnershipLabels } from '@/lib/partnerships';
 import {
-  getCollaborators, inviteCollaborator, leaveCollab, respondCollab,
-  setPostPinned, type Collaborator,
+  getCollaborators,
+  inviteCollaborator,
+  leaveCollab,
+  respondCollab,
+  setPostPinned,
+  type Collaborator,
 } from '@/lib/showcase';
 import { getBookmarkState } from '@/lib/bookmarks';
 import { fetchComments, type CommentView } from '@/lib/comments';
@@ -33,7 +46,18 @@ import { parseVideoOverlays } from '@/lib/video-overlays';
 import { confirm } from '@/lib/confirm';
 import { recordSwipe, undoSwipe } from '@/lib/deck';
 import { formatCount } from '@/lib/format';
-import { deletePost, getMyPosts, getPostDetail, getPostExtras, getVideoCaptions, POST_REPORT_REASONS, reportPost, setVideoCaptions, type PostDetail, type PostMediaItem } from '@/lib/posts';
+import {
+  deletePost,
+  getMyPosts,
+  getPostDetail,
+  getPostExtras,
+  getVideoCaptions,
+  POST_REPORT_REASONS,
+  reportPost,
+  setVideoCaptions,
+  type PostDetail,
+  type PostMediaItem,
+} from '@/lib/posts';
 import { downloadOwnPostMedia } from '@/lib/share';
 
 /** How many comments to show inline before "View all". Two fits without pushing the
@@ -78,7 +102,9 @@ export default function PostViewScreen() {
   const isOwner = !!post && post.user_id === user?.id;
   useEffect(() => {
     if (post?.media_type === 'video') {
-      void getVideoCaptions(post.id).then(setCaptions).catch(() => {});
+      void getVideoCaptions(post.id)
+        .then(setCaptions)
+        .catch(() => {});
     }
   }, [post?.id, post?.media_type]);
   useEffect(() => {
@@ -163,11 +189,17 @@ export default function PostViewScreen() {
       setLikeCount(data.like_count);
       setSkipCount(data.skip_count);
       setStatus('ready');
-      getBookmarkState(id).then((s) => setSaved(s.saved)).catch(() => {});
-      getPostExtras(id).then(setExtras).catch(() => setExtras([]));
+      getBookmarkState(id)
+        .then((s) => setSaved(s.saved))
+        .catch(() => {});
+      getPostExtras(id)
+        .then(setExtras)
+        .catch(() => setExtras([]));
       // A couple of comments inline, so you can see whether there's any conversation
       // without opening the sheet to find out (#6).
-      fetchComments(id, undefined, COMMENT_PREVIEW).then(setPreview).catch(() => setPreview([]));
+      fetchComments(id, undefined, COMMENT_PREVIEW)
+        .then(setPreview)
+        .catch(() => setPreview([]));
     } catch {
       setStatus('error');
     }
@@ -209,7 +241,9 @@ export default function PostViewScreen() {
   const myCollab = collabs.find((c) => c.user_id === user?.id);
   const loadCollabs = useCallback(() => {
     if (!id) return;
-    getCollaborators(id).then(setCollabs).catch(() => {});
+    getCollaborators(id)
+      .then(setCollabs)
+      .catch(() => {});
   }, [id]);
   useEffect(() => {
     loadCollabs();
@@ -267,7 +301,9 @@ export default function PostViewScreen() {
           // to anyone trying to reach the author's profile from a post (#7).
           headerTitle: () => (
             <Pressable
-              onPress={() => router.push({ pathname: '/u/[handle]', params: { handle: post.handle } })}
+              onPress={() =>
+                router.push({ pathname: '/u/[handle]', params: { handle: post.handle } })
+              }
               hitSlop={8}
               accessibilityRole="link"
               accessibilityLabel={`Open @${post.handle}’s profile`}>
@@ -281,7 +317,11 @@ export default function PostViewScreen() {
                 hitSlop={12}
                 accessibilityRole="button"
                 accessibilityLabel={saved ? 'Saved — edit collection' : 'Save this post'}>
-                <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={20} color={saved ? theme.tint : theme.text} />
+                <Ionicons
+                  name={saved ? 'bookmark' : 'bookmark-outline'}
+                  size={20}
+                  color={saved ? theme.tint : theme.text}
+                />
               </Pressable>
               <Pressable
                 onPress={() => setReportOpen(true)}
@@ -295,220 +335,274 @@ export default function PostViewScreen() {
         }}
       />
       <GestureDetector gesture={browsePan}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View>
-        {post.sensitive && !revealed ? <SensitiveCover onReveal={() => setRevealed(true)} /> : null}
-        {extras.length === 0 ? (
-          post.media_type === 'video' ? (
-            <PostVideo uri={post.media_url} overlays={post.overlays} />
-          ) : (
-            <Image source={{ uri: post.media_url }} style={styles.media} contentFit="cover" />
-          )
-        ) : (
-          // Carousel: cover + extras in a horizontal pager with dots + counter.
+        <ScrollView contentContainerStyle={styles.content}>
           <View>
-            <ScrollView
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              onScroll={(e) => onCarouselScroll(e.nativeEvent.contentOffset.x, extras.length + 1)}
-              scrollEventThrottle={16}
-              style={{ width: pageW, borderRadius: 16 }}>
-              {[{ media_url: post.media_url, media_type: post.media_type }, ...extras].map((m, i) => (
-                <View key={i} style={{ width: pageW }}>
-                  {m.media_type === 'video' ? (
-                    <PostVideo uri={m.media_url} />
-                  ) : (
-                    <Image source={{ uri: m.media_url }} style={styles.media} contentFit="cover" />
+            {post.sensitive && !revealed ? (
+              <SensitiveCover onReveal={() => setRevealed(true)} />
+            ) : null}
+            {extras.length === 0 ? (
+              post.media_type === 'video' ? (
+                <PostVideo uri={post.media_url} overlays={post.overlays} />
+              ) : (
+                <Image source={{ uri: post.media_url }} style={styles.media} contentFit="cover" />
+              )
+            ) : (
+              // Carousel: cover + extras in a horizontal pager with dots + counter.
+              <View>
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onScroll={(e) =>
+                    onCarouselScroll(e.nativeEvent.contentOffset.x, extras.length + 1)
+                  }
+                  scrollEventThrottle={16}
+                  style={{ width: pageW, borderRadius: 16 }}>
+                  {[{ media_url: post.media_url, media_type: post.media_type }, ...extras].map(
+                    (m, i) => (
+                      <View key={i} style={{ width: pageW }}>
+                        {m.media_type === 'video' ? (
+                          <PostVideo uri={m.media_url} />
+                        ) : (
+                          <Image
+                            source={{ uri: m.media_url }}
+                            style={styles.media}
+                            contentFit="cover"
+                          />
+                        )}
+                      </View>
+                    ),
                   )}
+                </ScrollView>
+                <View style={styles.pagePill}>
+                  <ThemedText type="small" style={{ color: '#fff' }}>
+                    {page + 1}/{extras.length + 1}
+                  </ThemedText>
                 </View>
-              ))}
-            </ScrollView>
-            <View style={styles.pagePill}>
-              <ThemedText type="small" style={{ color: '#fff' }}>{page + 1}/{extras.length + 1}</ThemedText>
-            </View>
-            <View style={styles.dots}>
-              {Array.from({ length: extras.length + 1 }).map((_, i) => (
-                <View key={i} style={[styles.dot, { backgroundColor: i === page ? theme.tint : theme.backgroundSelected }]} />
-              ))}
-            </View>
+                <View style={styles.dots}>
+                  {Array.from({ length: extras.length + 1 }).map((_, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.dot,
+                        { backgroundColor: i === page ? theme.tint : theme.backgroundSelected },
+                      ]}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
           </View>
-        )}
-        </View>
 
-        {/* Tap the heart to like/unlike, the cross to skip/un-skip. */}
-        <View style={styles.stats}>
-          <Stat
-            icon={myDir === 'right' ? 'heart' : 'heart-outline'}
-            value={likeCount}
-            tint={myDir === 'right' ? BRAND.accent : theme.text}
-            onPress={isOwnPost ? undefined : () => setDirection(myDir === 'right' ? null : 'right')}
-          />
-          <Stat
-            icon={myDir === 'left' ? 'close-circle' : 'close'}
-            value={skipCount}
-            tint={myDir === 'left' ? BRAND.accent : theme.textSecondary}
-            onPress={isOwnPost ? undefined : () => setDirection(myDir === 'left' ? null : 'left')}
-          />
-          <Stat
-            icon="chatbubble-outline"
-            value={commentCount}
-            tint={theme.textSecondary}
-            onPress={() => setCommentsOpen(true)}
-          />
-          <Pressable
-            onPress={() => setShareOpen(true)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Share this post">
-            <Ionicons name="share-outline" size={22} color={theme.textSecondary} />
-          </Pressable>
-          <View style={{ flex: 1 }} />
-          {isOwnPost ? (
+          {/* Tap the heart to like/unlike, the cross to skip/un-skip. */}
+          <View style={styles.stats}>
+            <Stat
+              icon={myDir === 'right' ? 'heart' : 'heart-outline'}
+              value={likeCount}
+              tint={myDir === 'right' ? BRAND.accent : theme.text}
+              onPress={
+                isOwnPost ? undefined : () => setDirection(myDir === 'right' ? null : 'right')
+              }
+            />
+            <Stat
+              icon={myDir === 'left' ? 'close-circle' : 'close'}
+              value={skipCount}
+              tint={myDir === 'left' ? BRAND.accent : theme.textSecondary}
+              onPress={isOwnPost ? undefined : () => setDirection(myDir === 'left' ? null : 'left')}
+            />
+            <Stat
+              icon="chatbubble-outline"
+              value={commentCount}
+              tint={theme.textSecondary}
+              onPress={() => setCommentsOpen(true)}
+            />
             <Pressable
-              onPress={() => setOwnerMenu(true)}
+              onPress={() => setShareOpen(true)}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel="Edit or delete this post">
-              <Ionicons name="create-outline" size={22} color={theme.text} />
+              accessibilityLabel="Share this post">
+              <Ionicons name="share-outline" size={22} color={theme.textSecondary} />
             </Pressable>
-          ) : null}
-        </View>
-
-        {captions ? (
-          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
-            <Ionicons name="text-outline" size={14} color={theme.textSecondary} style={{ marginTop: 2 }} />
-            <ThemedText type="small" themeColor="textSecondary" style={{ flex: 1 }}>
-              {captions}
-            </ThemedText>
-          </View>
-        ) : null}
-        {partnerLabel ? (
-          <ThemedText type="smallBold" themeColor="textSecondary">
-            {partnerLabel}
-          </ThemedText>
-        ) : null}
-        {collabs.filter((c) => c.status === 'accepted').length > 0 ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            with {collabs.filter((c) => c.status === 'accepted').map((c) => `@${c.handle}`).join(', ')}
-            {myCollab?.status === 'accepted' ? '  ·  ' : ''}
-            {myCollab?.status === 'accepted' ? (
-              <ThemedText
-                type="small"
-                style={{ color: BRAND.accent }}
-                onPress={async () => {
-                  if (!(await confirm('Leave this collab?', 'The post stops showing on your profile.', 'Leave'))) return;
-                  try {
-                    await leaveCollab(post.id);
-                    loadCollabs();
-                  } catch { /* noop */ }
-                }}>
-                Leave
-              </ThemedText>
-            ) : null}
-          </ThemedText>
-        ) : null}
-        {myCollab?.status === 'pending' ? (
-          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-            <ThemedText type="small">Co-author invite:</ThemedText>
-            <Button
-              title="Accept"
-              onPress={async () => {
-                try { await respondCollab(post.id, true); loadCollabs(); } catch { /* noop */ }
-              }}
-            />
-            <Button
-              title="Decline"
-              variant="secondary"
-              onPress={async () => {
-                try { await respondCollab(post.id, false); loadCollabs(); } catch { /* noop */ }
-              }}
-            />
-          </View>
-        ) : null}
-        {post.caption ? (
-          <MentionText type="default" style={styles.caption}>
-            {post.caption}
-          </MentionText>
-        ) : null}
-
-        {post.tags.length > 0 ? (
-          <View style={styles.tagRow}>
-            {post.tags.map((t) => (
-              <Pressable
-                key={t}
-                onPress={() => router.push({ pathname: '/tag/[name]', params: { name: t } })}
-                accessibilityRole="button"
-                accessibilityLabel={`See the ${t} tag`}
-                style={[styles.tag, { backgroundColor: theme.backgroundElement }]}>
-                <ThemedText type="small" style={{ color: theme.tint }}>
-                  #{t}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
-        {/* Own posts: analytics directly under caption/tags, above comments (#27).
-            Part 12D: accepted co-authors share the full analytics too. */}
-        {isOwnPost || myCollab?.status === 'accepted' ? (
-          <>
-            {/* Analytics and boosting are business tools. */}
-            {isBusiness ? <PostAnalyticsCard postId={post.id} /> : null}
-            {/* Likers list (Part 4B): only the owner has this door —
-                co-authors get aggregates, never the named list. */}
+            <View style={{ flex: 1 }} />
             {isOwnPost ? (
-              <Button
-                title="See who liked this"
-                variant="secondary"
-                onPress={() => router.push(`/post/${post.id}/likers`)}
-              />
-            ) : null}
-            {/* Boost (Part 5B): public approved posts only; the server enforces.
-                Owner only — co-authors can't spend on it. */}
-            {isBusiness && isOwnPost && post.visibility === 'public' ? (
-              <Button
-                title="Boost this post"
-                variant="secondary"
-                onPress={() => router.push(`/boost/${post.id}`)}
-              />
-            ) : null}
-          </>
-        ) : null}
-
-        {preview.length > 0 ? (
-          <View style={styles.previewWrap}>
-            {preview.map((c) => (
-              <Pressable key={c.id} onPress={() => setCommentsOpen(true)} style={styles.previewRow}>
-                <ThemedText type="smallBold">@{c.author_handle}</ThemedText>
-                <MentionText type="small" style={styles.previewBody} numberOfLines={2}>
-                  {c.is_deleted ? 'This comment was deleted.' : (c.body ?? '')}
-                </MentionText>
+              <Pressable
+                onPress={() => setOwnerMenu(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Edit or delete this post">
+                <Ionicons name="create-outline" size={22} color={theme.text} />
               </Pressable>
-            ))}
+            ) : null}
           </View>
-        ) : null}
 
-        <Pressable
-          onPress={() => setCommentsOpen(true)}
-          accessibilityRole="button"
-          style={[styles.commentsBtn, { borderColor: theme.border }]}>
-          <Ionicons name="chatbubble-outline" size={18} color={theme.text} />
-          <ThemedText type="smallBold">
-            {commentCount > 0
-              ? `View ${commentCount} comment${commentCount === 1 ? '' : 's'}`
-              : 'Add a comment'}
-          </ThemedText>
-        </Pressable>
+          {captions ? (
+            <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start' }}>
+              <Ionicons
+                name="text-outline"
+                size={14}
+                color={theme.textSecondary}
+                style={{ marginTop: 2 }}
+              />
+              <ThemedText type="small" themeColor="textSecondary" style={{ flex: 1 }}>
+                {captions}
+              </ThemedText>
+            </View>
+          ) : null}
+          {partnerLabel ? (
+            <ThemedText type="smallBold" themeColor="textSecondary">
+              {partnerLabel}
+            </ThemedText>
+          ) : null}
+          {collabs.filter((c) => c.status === 'accepted').length > 0 ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              with{' '}
+              {collabs
+                .filter((c) => c.status === 'accepted')
+                .map((c) => `@${c.handle}`)
+                .join(', ')}
+              {myCollab?.status === 'accepted' ? '  ·  ' : ''}
+              {myCollab?.status === 'accepted' ? (
+                <ThemedText
+                  type="small"
+                  style={{ color: BRAND.accent }}
+                  onPress={async () => {
+                    if (
+                      !(await confirm(
+                        'Leave this collab?',
+                        'The post stops showing on your profile.',
+                        'Leave',
+                      ))
+                    )
+                      return;
+                    try {
+                      await leaveCollab(post.id);
+                      loadCollabs();
+                    } catch {
+                      /* noop */
+                    }
+                  }}>
+                  Leave
+                </ThemedText>
+              ) : null}
+            </ThemedText>
+          ) : null}
+          {myCollab?.status === 'pending' ? (
+            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+              <ThemedText type="small">Co-author invite:</ThemedText>
+              <Button
+                title="Accept"
+                onPress={async () => {
+                  try {
+                    await respondCollab(post.id, true);
+                    loadCollabs();
+                  } catch {
+                    /* noop */
+                  }
+                }}
+              />
+              <Button
+                title="Decline"
+                variant="secondary"
+                onPress={async () => {
+                  try {
+                    await respondCollab(post.id, false);
+                    loadCollabs();
+                  } catch {
+                    /* noop */
+                  }
+                }}
+              />
+            </View>
+          ) : null}
+          {post.caption ? (
+            <MentionText type="default" style={styles.caption}>
+              {post.caption}
+            </MentionText>
+          ) : null}
 
-        {/* Swipe left/right anywhere on the post to move between your own posts (#26);
+          {post.tags.length > 0 ? (
+            <View style={styles.tagRow}>
+              {post.tags.map((t) => (
+                <Pressable
+                  key={t}
+                  onPress={() => router.push({ pathname: '/tag/[name]', params: { name: t } })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`See the ${t} tag`}
+                  style={[styles.tag, { backgroundColor: theme.backgroundElement }]}>
+                  <ThemedText type="small" style={{ color: theme.tint }}>
+                    #{t}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          {/* Own posts: analytics directly under caption/tags, above comments (#27).
+            Part 12D: accepted co-authors share the full analytics too. */}
+          {isOwnPost || myCollab?.status === 'accepted' ? (
+            <>
+              {/* Analytics and boosting are business tools. */}
+              {isBusiness ? <PostAnalyticsCard postId={post.id} /> : null}
+              {/* Likers list (Part 4B): only the owner has this door —
+                co-authors get aggregates, never the named list. */}
+              {isOwnPost ? (
+                <Button
+                  title="See who liked this"
+                  variant="secondary"
+                  onPress={() => router.push(`/post/${post.id}/likers`)}
+                />
+              ) : null}
+              {/* Boost (Part 5B): public approved posts only; the server enforces.
+                Owner only — co-authors can't spend on it. */}
+              {isBusiness && isOwnPost && post.visibility === 'public' ? (
+                <Button
+                  title="Boost this post"
+                  variant="secondary"
+                  onPress={() => router.push(`/boost/${post.id}`)}
+                />
+              ) : null}
+            </>
+          ) : null}
+
+          {preview.length > 0 ? (
+            <View style={styles.previewWrap}>
+              {preview.map((c) => (
+                <Pressable
+                  key={c.id}
+                  onPress={() => setCommentsOpen(true)}
+                  style={styles.previewRow}>
+                  <ThemedText type="smallBold">@{c.author_handle}</ThemedText>
+                  <MentionText type="small" style={styles.previewBody} numberOfLines={2}>
+                    {c.is_deleted ? 'This comment was deleted.' : (c.body ?? '')}
+                  </MentionText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          <Pressable
+            onPress={() => setCommentsOpen(true)}
+            accessibilityRole="button"
+            style={[styles.commentsBtn, { borderColor: theme.border }]}>
+            <Ionicons name="chatbubble-outline" size={18} color={theme.text} />
+            <ThemedText type="smallBold">
+              {commentCount > 0
+                ? `View ${commentCount} comment${commentCount === 1 ? '' : 's'}`
+                : 'Add a comment'}
+            </ThemedText>
+          </Pressable>
+
+          {/* Swipe left/right anywhere on the post to move between your own posts (#26);
             the counter is the only chrome left now the buttons are gone. */}
-        {isOwnPost && siblings.length > 1 ? (
-          <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center', marginTop: 10 }}>
-            {siblingIndex + 1} of {siblings.length} · swipe to browse
-          </ThemedText>
-        ) : null}
-      </ScrollView>
+          {isOwnPost && siblings.length > 1 ? (
+            <ThemedText
+              type="small"
+              themeColor="textSecondary"
+              style={{ textAlign: 'center', marginTop: 10 }}>
+              {siblingIndex + 1} of {siblings.length} · swipe to browse
+            </ThemedText>
+          ) : null}
+        </ScrollView>
       </GestureDetector>
 
       {commentsOpen ? (
@@ -518,7 +612,10 @@ export default function PostViewScreen() {
           onClose={() => {
             setCommentsOpen(false);
             // Otherwise a comment you just wrote wouldn't appear in the inline preview.
-            if (id) fetchComments(id, undefined, COMMENT_PREVIEW).then(setPreview).catch(() => {});
+            if (id)
+              fetchComments(id, undefined, COMMENT_PREVIEW)
+                .then(setPreview)
+                .catch(() => {});
           }}
           onCountDelta={(d) => setCommentCount((c) => Math.max(0, c + d))}
         />
@@ -531,7 +628,12 @@ export default function PostViewScreen() {
         options={POST_REPORT_REASONS.map((r) => ({ label: r, onPress: () => doReport(r) }))}
       />
 
-      <CollectionPicker postId={post.id} visible={saveOpen} onClose={() => setSaveOpen(false)} onChange={setSaved} />
+      <CollectionPicker
+        postId={post.id}
+        visible={saveOpen}
+        onClose={() => setSaveOpen(false)}
+        onChange={setSaved}
+      />
 
       {/* Part 14E: audience rules — only PUBLIC posts may leave the app. */}
       {shareOpen ? (
@@ -542,75 +644,74 @@ export default function PostViewScreen() {
         />
       ) : null}
 
-      {captionsOpen ? (
-        <View style={[stylesCollab.sheet, { backgroundColor: theme.background, borderColor: theme.border }]}>
-          <ThemedText type="smallBold">Video captions</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Shown with your video for people watching without sound.
-          </ThemedText>
-          <TextField
-            label=""
-            placeholder="What's said or shown in the video"
-            value={captionsDraft}
-            onChangeText={setCaptionsDraft}
-            multiline
+      <BottomSheet visible={captionsOpen} onClose={() => setCaptionsOpen(false)}>
+        <ThemedText type="smallBold">Video captions</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          Shown with your video for people watching without sound.
+        </ThemedText>
+        <TextField
+          label=""
+          placeholder="What's said or shown in the video"
+          value={captionsDraft}
+          onChangeText={setCaptionsDraft}
+          multiline
+        />
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <Button
+            title="Save"
+            onPress={async () => {
+              try {
+                await setVideoCaptions(post.id, captionsDraft.trim() || null);
+                setCaptions(captionsDraft.trim() || null);
+                setCaptionsOpen(false);
+              } catch (e) {
+                Alert.alert("Couldn't save", e instanceof Error ? e.message : 'Try again.');
+              }
+            }}
           />
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <Button
-              title="Save"
-              onPress={async () => {
-                try {
-                  await setVideoCaptions(post.id, captionsDraft.trim() || null);
-                  setCaptions(captionsDraft.trim() || null);
-                  setCaptionsOpen(false);
-                } catch (e) {
-                  Alert.alert("Couldn't save", e instanceof Error ? e.message : 'Try again.');
-                }
-              }}
-            />
-            <Button title="Cancel" variant="secondary" onPress={() => setCaptionsOpen(false)} />
-          </View>
+          <Button title="Cancel" variant="secondary" onPress={() => setCaptionsOpen(false)} />
         </View>
-      ) : null}
+      </BottomSheet>
 
-      {collabInviteOpen ? (
-        <View style={[stylesCollab.sheet, { backgroundColor: theme.background, borderColor: theme.border }]}>
-          <ThemedText type="smallBold">Invite a co-author</ThemedText>
-          <TextField
-            label=""
-            placeholder="@handle"
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={collabHandle}
-            onChangeText={setCollabHandle}
+      <BottomSheet visible={collabInviteOpen} onClose={() => setCollabInviteOpen(false)}>
+        <ThemedText type="smallBold">Invite a co-author</ThemedText>
+        <TextField
+          label=""
+          placeholder="@handle"
+          autoCapitalize="none"
+          autoCorrect={false}
+          value={collabHandle}
+          onChangeText={setCollabHandle}
+        />
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <Button
+            title="Invite"
+            disabled={!collabHandle.trim()}
+            onPress={async () => {
+              try {
+                await inviteCollaborator(post.id, collabHandle.trim());
+                setCollabInviteOpen(false);
+                setCollabHandle('');
+                loadCollabs();
+                Alert.alert('Invite sent', 'They appear as a co-author once they accept.');
+              } catch (e) {
+                Alert.alert("Couldn't invite", e instanceof Error ? e.message : 'Try again.');
+              }
+            }}
           />
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <Button
-              title="Invite"
-              disabled={!collabHandle.trim()}
-              onPress={async () => {
-                try {
-                  await inviteCollaborator(post.id, collabHandle.trim());
-                  setCollabInviteOpen(false);
-                  setCollabHandle('');
-                  loadCollabs();
-                  Alert.alert('Invite sent', 'They appear as a co-author once they accept.');
-                } catch (e) {
-                  Alert.alert("Couldn't invite", e instanceof Error ? e.message : 'Try again.');
-                }
-              }}
-            />
-            <Button title="Cancel" variant="secondary" onPress={() => setCollabInviteOpen(false)} />
-          </View>
+          <Button title="Cancel" variant="secondary" onPress={() => setCollabInviteOpen(false)} />
         </View>
-      ) : null}
+      </BottomSheet>
 
       <ActionMenu
         visible={ownerMenu}
         title="Your post"
         onClose={() => setOwnerMenu(false)}
         options={[
-          { label: 'Edit post', onPress: () => router.push({ pathname: '/post/[id]/edit', params: { id: post.id } }) },
+          {
+            label: 'Edit post',
+            onPress: () => router.push({ pathname: '/post/[id]/edit', params: { id: post.id } }),
+          },
           {
             label: pinned ? 'Unpin from profile' : 'Pin to profile',
             onPress: async () => {
@@ -650,7 +751,14 @@ export default function PostViewScreen() {
             label: 'Delete post',
             destructive: true,
             onPress: async () => {
-              if (!(await confirm('Delete post?', 'This permanently removes it and its comments. This cannot be undone.', 'Delete'))) return;
+              if (
+                !(await confirm(
+                  'Delete post?',
+                  'This permanently removes it and its comments. This cannot be undone.',
+                  'Delete',
+                ))
+              )
+                return;
               try {
                 await deletePost(post.id);
                 router.back();
@@ -712,7 +820,15 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
   content: { padding: 16, gap: 14 },
   media: { width: '100%', aspectRatio: 4 / 5, borderRadius: 16, backgroundColor: '#000' },
-  pagePill: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  pagePill: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 8 },
   dot: { width: 6, height: 6, borderRadius: 3 },
   stats: { flexDirection: 'row', gap: 20 },
@@ -741,10 +857,15 @@ const styles = StyleSheet.create({
   },
 });
 
-
 const stylesCollab = StyleSheet.create({
   sheet: {
-    position: 'absolute', left: 16, right: 16, bottom: 24,
-    borderWidth: 1, borderRadius: 14, padding: 14, gap: 10,
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 24,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    gap: 10,
   },
 });

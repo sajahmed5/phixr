@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, TextInput, View, ScrollView } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,7 +25,7 @@ import { confirm } from '@/lib/confirm';
 import { markInboxSeen } from '@/lib/inbox-badge';
 import { loadInbox, saveInbox } from '@/lib/message-cache';
 import { useRefresh } from '@/lib/use-refresh';
-import { TAB_BAR_CLEARANCE } from '@/constants/config';
+import { TAB_BAR_CLEARANCE, BRAND } from '@/constants/config';
 
 export default function MessagesScreen() {
   const theme = useTheme();
@@ -100,7 +100,11 @@ export default function MessagesScreen() {
 
   return (
     <ThemedView style={{ flex: 1 }}>
-      <View style={styles.tabs}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabsScroll}
+        contentContainerStyle={styles.tabs}>
         {(['messages', 'general', 'requests'] as const).map((t) => (
           <Pressable
             key={t}
@@ -114,7 +118,6 @@ export default function MessagesScreen() {
             </ThemedText>
           </Pressable>
         ))}
-        <View style={{ flex: 1 }} />
         {showArchived || archivedCount > 0 ? (
           <Pressable
             onPress={() => setShowArchived((v) => !v)}
@@ -126,7 +129,7 @@ export default function MessagesScreen() {
             </ThemedText>
           </Pressable>
         ) : null}
-      </View>
+      </ScrollView>
 
       <View style={[styles.search, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}>
         <Ionicons name="search" size={16} color={theme.textSecondary} />
@@ -200,7 +203,7 @@ export default function MessagesScreen() {
 
       <Pressable
         onPress={() => router.push('/messages/new')}
-        style={[styles.fab, { backgroundColor: theme.tint, bottom: insets.bottom + TAB_BAR_CLEARANCE }]}
+        style={[styles.fab, { backgroundColor: BRAND.accent, bottom: insets.bottom + TAB_BAR_CLEARANCE }]}
         accessibilityLabel="New message">
         <Ionicons name="create-outline" size={24} color="#fff" />
       </Pressable>
@@ -266,7 +269,7 @@ function ConversationRow({
               rowRef.current?.close();
               onArchive();
             }}
-            style={[styles.action, { backgroundColor: theme.tint }]}>
+            style={[styles.action, { backgroundColor: BRAND.accent }]}>
             <Ionicons name={c.archived ? 'arrow-undo-outline' : 'archive-outline'} size={18} color="#fff" />
             <ThemedText type="small" style={{ color: '#fff' }}>
               {c.archived ? 'Unarchive' : 'Archive'}
@@ -344,7 +347,7 @@ function ConversationRow({
               {preview}
             </ThemedText>
             {c.muted ? <Ionicons name="notifications-off" size={13} color={theme.textSecondary} /> : null}
-            {c.unread ? <View style={[styles.dot, { backgroundColor: theme.tint }]} /> : null}
+            {c.unread ? <View style={[styles.dot, { backgroundColor: BRAND.accent }]} /> : null}
           </View>
         </View>
       </Pressable>
@@ -353,6 +356,7 @@ function ConversationRow({
 }
 
 const styles = StyleSheet.create({
+  tabsScroll: { flexGrow: 0 },
   center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   tabs: { flexDirection: 'row', paddingHorizontal: 12 },
   tab: { paddingVertical: 10, paddingHorizontal: 12, marginRight: 8 },

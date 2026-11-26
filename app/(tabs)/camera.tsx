@@ -1,9 +1,19 @@
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  Linking,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -211,6 +221,11 @@ export default function CameraScreen() {
     const blocked = !camPerm.canAskAgain;
     return (
       <View style={[styles.center, styles.explain]}>
+        <StatusBar style="light" />
+        {/* The tab bar is hidden on the camera, so this screen needs its own way out. */}
+        <View style={[styles.permClose, { top: insets.top + 8 }]}>
+          <IconButton name="close" onPress={() => router.back()} />
+        </View>
         <Ionicons name="camera-outline" size={56} color="#fff" />
         <ThemedText type="subtitle" style={styles.explainText}>
           Camera access
@@ -241,7 +256,9 @@ export default function CameraScreen() {
         <Button
           title={target === 'post' ? 'Choose from library (up to 5)' : 'Choose from library'}
           variant="secondary"
-          onPress={() => pickFromLibrary(startNewComposition, startMultiComposition, target === 'post', setBusy)}
+          onPress={() =>
+            pickFromLibrary(startNewComposition, startMultiComposition, target === 'post', setBusy)
+          }
         />
       </View>
     );
@@ -273,6 +290,7 @@ export default function CameraScreen() {
         <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
       )}
 
+      <StatusBar style="light" />
       {/* Top controls */}
       <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
         {/* Equal-flex sides so the Post/Story toggle is centred on the SCREEN. With
@@ -286,8 +304,13 @@ export default function CameraScreen() {
             <Pressable
               key={t}
               onPress={() => !recording && setTarget(t)}
-              style={[styles.destTab, target === t && { backgroundColor: 'rgba(255,255,255,0.9)' }]}>
-              <ThemedText type="small" style={{ color: target === t ? '#000' : '#fff', fontWeight: '700' }}>
+              style={[
+                styles.destTab,
+                target === t && { backgroundColor: 'rgba(255,255,255,0.9)' },
+              ]}>
+              <ThemedText
+                type="small"
+                style={{ color: target === t ? '#000' : '#fff', fontWeight: '700' }}>
                 {t === 'post' ? 'Post' : 'Story'}
               </ThemedText>
             </Pressable>
@@ -337,7 +360,14 @@ export default function CameraScreen() {
         <View style={styles.shutterRow}>
           <IconButton
             name="images-outline"
-            onPress={() => pickFromLibrary(startNewComposition, startMultiComposition, target === 'post', setBusy)}
+            onPress={() =>
+              pickFromLibrary(
+                startNewComposition,
+                startMultiComposition,
+                target === 'post',
+                setBusy,
+              )
+            }
             disabled={recording}
           />
           <ShutterButton
@@ -498,6 +528,7 @@ const styles = StyleSheet.create({
   explain: { padding: 32, gap: 14 },
   explainText: { color: '#fff', textAlign: 'center' },
   explainBody: { color: 'rgba(255,255,255,0.8)', textAlign: 'center' },
+  permClose: { position: 'absolute', left: 16 },
   topBar: {
     position: 'absolute',
     top: 0,

@@ -15,6 +15,7 @@ import {
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming, ZoomIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BRAND } from '@/constants/config';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ActionMenu, type ActionOption } from '@/components/ui/action-menu';
@@ -387,6 +388,7 @@ export default function ConversationScreen() {
             onDelete={async () => { await respondToRequest(cid, false); router.back(); }}
             onBlock={async () => { if (other) { await blockUser(other.id); router.back(); } }}
             theme={theme}
+            bottomInset={keyboard > 0 ? 0 : insets.bottom}
           />
         ) : (
           <Composer
@@ -492,7 +494,7 @@ function MessageBubble({
   const isPending = 'tempId' in item;
   const mine = isPending || item.sender_id === meId;
   const deleted = !isPending && !!item.deleted_at;
-  const bubbleColor = mine ? theme.tint : theme.backgroundElement;
+  const bubbleColor = mine ? BRAND.accent : theme.backgroundElement;
   const textColor = mine ? '#fff' : theme.text;
   const lastTap = useRef(0);
 
@@ -571,7 +573,7 @@ function MessageBubble({
               <Animated.View key={emoji} entering={ZoomIn.springify().damping(13).stiffness(200)}>
                 <Pressable
                   onPress={() => !isPending && onReact(item.id, emoji)}
-                  style={[styles.reactionChip, { backgroundColor: g.mine ? theme.tint : theme.backgroundElement, borderColor: theme.border }]}>
+                  style={[styles.reactionChip, { backgroundColor: g.mine ? BRAND.accent : theme.backgroundElement, borderColor: theme.border }]}>
                   <ThemedText type="small" style={{ color: g.mine ? '#fff' : theme.text }}>
                     {emoji}
                     {g.count > 1 ? ` ${g.count}` : ''}
@@ -603,16 +605,16 @@ function MessageBubble({
   );
 }
 
-function RequestBanner({ handle, onAccept, onDelete, onBlock, theme }: { handle?: string | null; onAccept: () => void; onDelete: () => void; onBlock: () => void; theme: ReturnType<typeof useTheme> }) {
+function RequestBanner({ handle, onAccept, onDelete, onBlock, theme, bottomInset }: { handle?: string | null; onAccept: () => void; onDelete: () => void; onBlock: () => void; theme: ReturnType<typeof useTheme>; bottomInset: number }) {
   return (
-    <View style={[styles.banner, { borderTopColor: theme.border }]}>
+    <View style={[styles.banner, { borderTopColor: theme.border, paddingBottom: bottomInset + 12 }]}>
       <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center', marginBottom: 8 }}>
         {handle ? `@${handle} wants to send you a message.` : 'New message request.'}
       </ThemedText>
       <View style={styles.bannerRow}>
         <Pressable onPress={onBlock} style={[styles.bannerBtn, { borderColor: theme.border }]}><ThemedText type="small" style={{ color: theme.danger }}>Block</ThemedText></Pressable>
         <Pressable onPress={onDelete} style={[styles.bannerBtn, { borderColor: theme.border }]}><ThemedText type="small">Delete</ThemedText></Pressable>
-        <Pressable onPress={onAccept} style={[styles.bannerBtn, { backgroundColor: theme.tint, borderColor: theme.tint }]}><ThemedText type="small" style={{ color: '#fff', fontWeight: '700' }}>Accept</ThemedText></Pressable>
+        <Pressable onPress={onAccept} style={[styles.bannerBtn, { backgroundColor: BRAND.accent, borderColor: BRAND.accent }]}><ThemedText type="small" style={{ color: '#fff', fontWeight: '700' }}>Accept</ThemedText></Pressable>
       </View>
     </View>
   );

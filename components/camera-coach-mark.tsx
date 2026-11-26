@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { usePathname } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,9 +13,18 @@ import { dismissCameraCoach, isCameraCoachArmed, onCameraCoachChange } from '@/l
  * their first post. Armed when the first-run tutorial finishes; dismissed on tap or once
  * a post is created. Rendered app-wide (next to the tab bar) but only visible while armed.
  */
+// Only the four main tabs show the camera button this points at.
+const TAB_PATHS = new Set(['/', '/following', '/messages', '/profile']);
+
 export function CameraCoachMark() {
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
   const [visible, setVisible] = useState(false);
+
+  // Opening the camera is exactly what the hint asks for — job done.
+  useEffect(() => {
+    if (visible && pathname === '/camera') void dismissCameraCoach();
+  }, [pathname, visible]);
 
   useEffect(() => {
     let active = true;
@@ -31,7 +41,7 @@ export function CameraCoachMark() {
     };
   }, []);
 
-  if (!visible) return null;
+  if (!visible || !TAB_PATHS.has(pathname)) return null;
 
   return (
     <View

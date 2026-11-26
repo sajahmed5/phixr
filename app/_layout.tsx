@@ -9,6 +9,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { CameraCoachMark } from '@/components/camera-coach-mark';
 import { OfflineBanner } from '@/components/offline-banner';
+import { BRAND } from '@/constants/config';
+import { Colors } from '@/constants/theme';
 import { ReportIssueProvider } from '@/components/report-issue';
 import { UploadBanner } from '@/components/upload-banner';
 import { TERMS_VERSION } from '@/constants/legal';
@@ -39,6 +41,33 @@ SplashScreen.preventAutoHideAsync();
  *   onboarding   → (onboarding)/tags
  *   ready        → (tabs)
  */
+
+// Navigation chrome (stack headers, back arrows, screen backgrounds) in the app's own
+// colours, so pushed screens match the tabs: no grey header band over a black screen in
+// dark mode, and brand-orange back arrows instead of iOS blue.
+const NAV_THEME_LIGHT = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: BRAND.accent,
+    background: Colors.light.background,
+    card: Colors.light.background,
+    text: Colors.light.text,
+    border: Colors.light.border,
+  },
+};
+const NAV_THEME_DARK = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: BRAND.accent,
+    background: Colors.dark.background,
+    card: Colors.dark.background,
+    text: Colors.dark.text,
+    border: Colors.dark.border,
+  },
+};
+
 function useAuthGuard(status: AuthStatus) {
   const segments = useSegments();
   const router = useRouter();
@@ -194,7 +223,7 @@ function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <ThemeProvider value={colorScheme === 'dark' ? NAV_THEME_DARK : NAV_THEME_LIGHT}>
           <AuthProvider>
             <NotificationsProvider>
               <OutboxProvider>

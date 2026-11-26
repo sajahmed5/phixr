@@ -1,3 +1,4 @@
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import {
   Canvas,
@@ -66,11 +67,18 @@ const FilterSwatches = memo(function FilterSwatches({
   onPick: (id: string) => void;
 }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rowPad}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.rowPad}>
       {FILTERS.map((f) => (
         <Pressable key={f.id} style={styles.filterChip} onPress={() => onPick(f.id)}>
           {/* Was an empty bordered box, which told you nothing about the filter. */}
-          <View style={[styles.filterSwatch, { borderColor: activeId === f.id ? BRAND.accent : '#333' }]}>
+          <View
+            style={[
+              styles.filterSwatch,
+              { borderColor: activeId === f.id ? BRAND.accent : '#333' },
+            ]}>
             {image ? (
               <Canvas style={styles.filterSwatchCanvas}>
                 <SkiaImage image={image} x={0} y={0} width={SWATCH} height={SWATCH} fit="cover">
@@ -157,7 +165,7 @@ export function MediaEditor({
   const areaW = winW;
   const areaH = Math.max(200, winH - topH - bottomH);
   const { cw, ch } = useMemo(() => {
-    const aspect = isVideo ? (mediaAspect || 9 / 16) : image ? image.width() / image.height() : 1;
+    const aspect = isVideo ? mediaAspect || 9 / 16 : image ? image.width() / image.height() : 1;
     if (areaW / areaH > aspect) return { cw: areaH * aspect, ch: areaH };
     return { cw: areaW, ch: areaW / aspect };
   }, [isVideo, mediaAspect, image, areaW, areaH]);
@@ -291,6 +299,7 @@ export function MediaEditor({
 
   return (
     <View style={styles.root}>
+      <StatusBar style="light" />
       {/* Top bar */}
       <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
         <Pressable onPress={onCancel} hitSlop={10} disabled={exporting}>
@@ -330,34 +339,34 @@ export function MediaEditor({
                 nativeControls={false}
               />
             ) : (
-            <Canvas style={{ width: cw, height: ch }}>
-              <Group>
-                <SkiaImage image={image} x={0} y={0} width={cw} height={ch} fit="cover">
-                  {filterMatrix ? <ColorMatrix matrix={filterMatrix} /> : null}
-                </SkiaImage>
-                {doc.strokes.map((s) => (
-                  <SkiaPath
-                    key={s.id}
-                    path={toPath(s.points)}
-                    color={s.color}
-                    style="stroke"
-                    strokeWidth={s.width}
-                    strokeCap="round"
-                    strokeJoin="round"
-                  />
-                ))}
-                {livePoints.length > 0 ? (
-                  <SkiaPath
-                    path={toPath(livePoints)}
-                    color={brushColor}
-                    style="stroke"
-                    strokeWidth={brushSize}
-                    strokeCap="round"
-                    strokeJoin="round"
-                  />
-                ) : null}
-              </Group>
-            </Canvas>
+              <Canvas style={{ width: cw, height: ch }}>
+                <Group>
+                  <SkiaImage image={image} x={0} y={0} width={cw} height={ch} fit="cover">
+                    {filterMatrix ? <ColorMatrix matrix={filterMatrix} /> : null}
+                  </SkiaImage>
+                  {doc.strokes.map((s) => (
+                    <SkiaPath
+                      key={s.id}
+                      path={toPath(s.points)}
+                      color={s.color}
+                      style="stroke"
+                      strokeWidth={s.width}
+                      strokeCap="round"
+                      strokeJoin="round"
+                    />
+                  ))}
+                  {livePoints.length > 0 ? (
+                    <SkiaPath
+                      path={toPath(livePoints)}
+                      color={brushColor}
+                      style="stroke"
+                      strokeWidth={brushSize}
+                      strokeCap="round"
+                      strokeJoin="round"
+                    />
+                  ) : null}
+                </Group>
+              </Canvas>
             )}
 
             {/* Tap empty canvas to deselect. Must sit UNDER the overlays — as a sibling
@@ -378,7 +387,12 @@ export function MediaEditor({
                 onEditText={(id) => {
                   const layer = doc.layers.find((x) => x.id === id);
                   if (layer?.kind === 'text') {
-                    setTextDraft({ id, text: layer.text, color: layer.color, fontFamily: layer.fontFamily });
+                    setTextDraft({
+                      id,
+                      text: layer.text,
+                      color: layer.color,
+                      fontFamily: layer.fontFamily,
+                    });
                   }
                 }}
               />
@@ -402,7 +416,10 @@ export function MediaEditor({
           ) : null}
 
           {tool === 'sticker' ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rowPad}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.rowPad}>
               {STICKERS.map((e) => (
                 <Pressable key={e} style={styles.sticker} onPress={() => addSticker(e)}>
                   <Text style={{ fontSize: 30 }}>{e}</Text>
@@ -419,7 +436,9 @@ export function MediaEditor({
                     key={s}
                     onPress={() => setBrushSize(s)}
                     style={[styles.brushDotWrap, brushSize === s && styles.brushDotSel]}>
-                    <View style={{ width: s, height: s, borderRadius: s / 2, backgroundColor: '#fff' }} />
+                    <View
+                      style={{ width: s, height: s, borderRadius: s / 2, backgroundColor: '#fff' }}
+                    />
                   </Pressable>
                 ))}
                 <View style={{ width: 12 }} />
@@ -427,7 +446,11 @@ export function MediaEditor({
                   <Pressable
                     key={c}
                     onPress={() => setBrushColor(c)}
-                    style={[styles.swatch, { backgroundColor: c }, brushColor === c && styles.swatchSel]}
+                    style={[
+                      styles.swatch,
+                      { backgroundColor: c },
+                      brushColor === c && styles.swatchSel,
+                    ]}
                   />
                 ))}
               </View>
@@ -438,7 +461,14 @@ export function MediaEditor({
             <View style={styles.rowPad}>
               <Pressable
                 style={styles.addTextBtn}
-                onPress={() => setTextDraft({ id: null, text: '', color: PALETTE[0], fontFamily: FONTS[0].family })}>
+                onPress={() =>
+                  setTextDraft({
+                    id: null,
+                    text: '',
+                    color: PALETTE[0],
+                    fontFamily: FONTS[0].family,
+                  })
+                }>
                 <Ionicons name="add" size={18} color="#fff" />
                 <Text style={styles.addTextLabel}>Add text</Text>
               </Pressable>
@@ -450,12 +480,32 @@ export function MediaEditor({
             {/* Filters and Draw are burn-in effects, which video can't do without a
                 re-encode — so video gets Text and Sticker only. */}
             {!isVideo ? (
-              <ToolTab icon="color-filter-outline" label="Filters" active={tool === 'filter'} onPress={() => setTool('filter')} />
+              <ToolTab
+                icon="color-filter-outline"
+                label="Filters"
+                active={tool === 'filter'}
+                onPress={() => setTool('filter')}
+              />
             ) : null}
-            <ToolTab icon="text-outline" label="Text" active={tool === 'text'} onPress={() => setTool('text')} />
-            <ToolTab icon="happy-outline" label="Sticker" active={tool === 'sticker'} onPress={() => setTool('sticker')} />
+            <ToolTab
+              icon="text-outline"
+              label="Text"
+              active={tool === 'text'}
+              onPress={() => setTool('text')}
+            />
+            <ToolTab
+              icon="happy-outline"
+              label="Sticker"
+              active={tool === 'sticker'}
+              onPress={() => setTool('sticker')}
+            />
             {!isVideo ? (
-              <ToolTab icon="brush-outline" label="Draw" active={tool === 'draw'} onPress={() => setTool('draw')} />
+              <ToolTab
+                icon="brush-outline"
+                label="Draw"
+                active={tool === 'draw'}
+                onPress={() => setTool('draw')}
+              />
             ) : null}
           </View>
         </View>
@@ -484,16 +534,34 @@ export function MediaEditor({
             placeholderTextColor="rgba(255,255,255,0.5)"
             autoFocus
             multiline
-            style={[styles.textModalInput, { color: textDraft.color, fontFamily: textDraft.fontFamily === 'System' ? undefined : textDraft.fontFamily }]}
+            style={[
+              styles.textModalInput,
+              {
+                color: textDraft.color,
+                fontFamily: textDraft.fontFamily === 'System' ? undefined : textDraft.fontFamily,
+              },
+            ]}
           />
           <View style={styles.textModalControls}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rowPad}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.rowPad}>
               {FONTS.map((f) => (
                 <Pressable
                   key={f.family}
                   onPress={() => setTextDraft((d) => (d ? { ...d, fontFamily: f.family } : d))}
-                  style={[styles.fontChip, textDraft.fontFamily === f.family && styles.fontChipSel]}>
-                  <Text style={{ color: '#fff', fontFamily: f.family === 'System' ? undefined : f.family }}>{f.label}</Text>
+                  style={[
+                    styles.fontChip,
+                    textDraft.fontFamily === f.family && styles.fontChipSel,
+                  ]}>
+                  <Text
+                    style={{
+                      color: '#fff',
+                      fontFamily: f.family === 'System' ? undefined : f.family,
+                    }}>
+                    {f.label}
+                  </Text>
                 </Pressable>
               ))}
               <View style={{ width: 12 }} />
@@ -501,7 +569,11 @@ export function MediaEditor({
                 <Pressable
                   key={c}
                   onPress={() => setTextDraft((d) => (d ? { ...d, color: c } : d))}
-                  style={[styles.swatch, { backgroundColor: c }, textDraft.color === c && styles.swatchSel]}
+                  style={[
+                    styles.swatch,
+                    { backgroundColor: c },
+                    textDraft.color === c && styles.swatchSel,
+                  ]}
                 />
               ))}
             </ScrollView>
@@ -536,13 +608,32 @@ function ToolTab({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 6 },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+  },
   topRight: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  doneBtn: { backgroundColor: BRAND.accent, paddingHorizontal: 16, paddingVertical: 7, borderRadius: 18, minWidth: 60, alignItems: 'center' },
+  doneBtn: {
+    backgroundColor: BRAND.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 18,
+    minWidth: 60,
+    alignItems: 'center',
+  },
   doneText: { color: '#fff', fontWeight: '700' },
   canvasArea: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   panel: { backgroundColor: '#111' },
-  rowPad: { paddingHorizontal: 12, paddingVertical: 10, gap: 10, flexDirection: 'row', alignItems: 'center' },
+  rowPad: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   filterChip: { alignItems: 'center', gap: 4, marginRight: 6 },
   filterSwatch: {
     width: SWATCH + 4,
@@ -557,19 +648,65 @@ const styles = StyleSheet.create({
   chipActive: { color: BRAND.accent, fontWeight: '600' },
   sticker: { padding: 6 },
   drawRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  brushDotWrap: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#333' },
+  brushDotWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
   brushDotSel: { borderColor: BRAND.accent },
   swatch: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: 'transparent' },
   swatchSel: { borderColor: '#fff' },
-  addTextBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#222', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18 },
+  addTextBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#222',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+  },
   addTextLabel: { color: '#fff', fontWeight: '600' },
-  tabs: { flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#222' },
+  tabs: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#222',
+  },
   tab: { alignItems: 'center', gap: 3 },
   tabLabel: { color: '#fff', fontSize: 11 },
-  textModal: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)' },
-  textModalBar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
-  textModalInput: { flex: 1, fontSize: 30, fontWeight: '700', textAlign: 'center', paddingHorizontal: 24 },
+  textModal: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+  },
+  textModalBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  textModalInput: {
+    flex: 1,
+    fontSize: 30,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
   textModalControls: { paddingBottom: 30 },
-  fontChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: '#333' },
+  fontChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
   fontChipSel: { borderColor: BRAND.accent },
 });

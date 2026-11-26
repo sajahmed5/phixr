@@ -1,4 +1,6 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useRef } from 'react';
+import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -11,7 +13,10 @@ export type ActionOption = {
   destructive?: boolean;
 };
 
-/** Bottom-anchored action sheet overlay. Render at the top of a screen/sheet. */
+/**
+ * Bottom-anchored action sheet. Shown in its own transparent Modal so it always sits
+ * above the floating tab bar and every other overlay, with room for the home indicator.
+ */
 export function ActionMenu({
   visible,
   title,
@@ -30,67 +35,88 @@ export function ActionMenu({
   onEmoji?: (emoji: string) => void;
 }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   useAndroidBack(visible, onClose); // hardware back dismisses the menu, not the screen
-  if (!visible) return null;
+  // The chosen action runs once the menu has fully closed: on iOS a sheet, alert or
+  // picker opened while this Modal is still dismissing is silently dropped.
+  const pending = useRef<(() => void) | null>(null);
+  const choose = (fn: () => void) => {
+    if (Platform.OS === 'ios') pending.current = fn;
+    onClose();
+    if (Platform.OS !== 'ios') fn();
+  };
+  const runPending = () => {
+    const fn = pending.current;
+    pending.current = null;
+    fn?.();
+  };
 
   return (
-    <View style={styles.overlay}>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Dismiss menu" />
-      <ThemedView style={[styles.menu, { borderColor: theme.border }]}>
-        {title ? (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.title}>
-            {title}
-          </ThemedText>
-        ) : null}
-        {emojis && onEmoji ? (
-          <View style={styles.emojiRow}>
-            {emojis.map((e) => (
-              <Pressable
-                key={e}
-                accessibilityRole="button"
-                accessibilityLabel={`React ${e}`}
-                onPress={() => {
-                  onClose();
-                  onEmoji(e);
-                }}
-                style={({ pressed }) => [styles.emojiBtn, pressed && { backgroundColor: theme.backgroundElement }]}>
-                <ThemedText style={styles.emoji}>{e}</ThemedText>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-        {options.map((o, i) => (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+      onDismiss={runPending}>
+      <View style={styles.overlay}>
+        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Dismiss menu" />
+        <ThemedView
+          style={[styles.menu, { borderColor: theme.border, paddingBottom: insets.bottom + 8 }]}>
+          {title ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.title}>
+              {title}
+            </ThemedText>
+          ) : null}
+          {emojis && onEmoji ? (
+            <View style={styles.emojiRow}>
+              {emojis.map((e) => (
+                <Pressable
+                  key={e}
+                  accessibilityRole="button"
+                  accessibilityLabel={`React ${e}`}
+                  onPress={() => choose(() => onEmoji(e))}
+                  style={({ pressed }) => [
+                    styles.emojiBtn,
+                    pressed && { backgroundColor: theme.backgroundElement },
+                  ]}>
+                  <ThemedText style={styles.emoji}>{e}</ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+          {options.map((o, i) => (
+            <Pressable
+              key={o.label}
+              accessibilityRole="button"
+              onPress={() => choose(o.onPress)}
+              style={({ pressed }) => [
+                styles.option,
+                i > 0 && { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth },
+                pressed && { backgroundColor: theme.backgroundElement },
+              ]}>
+              <ThemedText
+                type="default"
+                style={{ color: o.destructive ? theme.danger : theme.text }}>
+                {o.label}
+              </ThemedText>
+            </Pressable>
+          ))}
           <Pressable
-            key={o.label}
             accessibilityRole="button"
-            onPress={() => {
-              onClose();
-              o.onPress();
-            }}
+            onPress={onClose}
             style={({ pressed }) => [
-              styles.option,
-              i > 0 && { borderTopColor: theme.border, borderTopWidth: StyleSheet.hairlineWidth },
-              pressed && { backgroundColor: theme.backgroundElement },
+              styles.cancel,
+              { backgroundColor: theme.backgroundElement },
+              pressed && { opacity: 0.8 },
             ]}>
-            <ThemedText type="default" style={{ color: o.destructive ? theme.danger : theme.text }}>
-              {o.label}
+            <ThemedText type="default" style={{ fontWeight: '700' }}>
+              Cancel
             </ThemedText>
           </Pressable>
-        ))}
-        <Pressable
-          accessibilityRole="button"
-          onPress={onClose}
-          style={({ pressed }) => [
-            styles.cancel,
-            { backgroundColor: theme.backgroundElement },
-            pressed && { opacity: 0.8 },
-          ]}>
-          <ThemedText type="default" style={{ fontWeight: '700' }}>
-            Cancel
-          </ThemedText>
-        </Pressable>
-      </ThemedView>
-    </View>
+        </ThemedView>
+      </View>
+    </Modal>
   );
 }
 

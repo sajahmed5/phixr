@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 
+import { useReportIssue } from '@/components/report-issue';
 import { ThemedText } from '@/components/themed-text';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { ThemedView } from '@/components/themed-view';
@@ -46,6 +47,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { profile, reload, signOut, signOutAll } = useAuth();
   const isBusiness = isBusinessProfile(profile);
+  const reportIssue = useReportIssue();
 
   const [isPrivate, setIsPrivate] = useState(profile?.is_private ?? false);
   const [simOffline, setSimOffline] = useState(isSimulatingOffline());
@@ -314,6 +316,11 @@ export default function SettingsScreen() {
             onPress={() => router.push('/legal/guidelines')}
           />
           <LinkRow
+            icon="bug-outline"
+            label="Report a problem"
+            onPress={() => reportIssue.open('settings-help')}
+          />
+          <LinkRow
             icon="mail-outline"
             label="Contact support"
             onPress={() =>
@@ -459,6 +466,7 @@ export default function SettingsScreen() {
           { label: 'Keep them public', onPress: () => {} },
         ]}
       />
+      {reportIssue.activeOpener === 'settings-help' ? reportIssue.renderSheet('settings-help') : null}
     </ThemedView>
   );
 }

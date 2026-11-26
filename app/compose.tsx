@@ -298,7 +298,7 @@ export default function ComposeScreen() {
         style={styles.fill}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 96 }]}
+          contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
           keyboardShouldPersistTaps="handled">
           {/* Preview */}
           <View style={styles.previewWrap}>
@@ -821,11 +821,9 @@ const styles = StyleSheet.create({
   progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: 6, borderRadius: 3 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  // In normal layout below the scroll view (not floating over it), so the end of the
+  // form and the field being edited are never hidden behind the buttons.
   postBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     padding: 16,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: 8,

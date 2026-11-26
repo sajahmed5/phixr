@@ -74,7 +74,9 @@ export function ProfileHeader({
           accessibilityRole={onPressIdentity ? 'button' : undefined}
           accessibilityLabel={onPressIdentity ? 'Switch account' : undefined}
           style={styles.identityRow}>
-          <ThemedText type="subtitle">{profile.display_name}</ThemedText>
+          <ThemedText type="subtitle" style={styles.name} numberOfLines={1}>
+            {profile.display_name}
+          </ThemedText>
           {onPressIdentity ? (
             <Ionicons name="chevron-down" size={16} color={BRAND.accent} />
           ) : null}
@@ -112,7 +114,9 @@ export function ProfileHeader({
 function Stat({ label, value, onPress }: { label: string; value: number; onPress?: () => void }) {
   const content = (
     <View style={styles.stat}>
-      <ThemedText type="subtitle">{formatCount(value)}</ThemedText>
+      <ThemedText type="subtitle" style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+        {formatCount(value)}
+      </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
         {label}
       </ThemedText>
@@ -151,7 +155,10 @@ const styles = StyleSheet.create({
   stat: { alignItems: 'center', gap: 2 },
   pointsHero: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 },
   pointsValue: { fontSize: 40, lineHeight: 44 },
-  identityRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  identityRow: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%' },
+  // Long names stay on one line instead of pushing the chevron off-screen.
+  name: { fontSize: 26, lineHeight: 32, flexShrink: 1 },
+  statValue: { fontSize: 20, lineHeight: 26, fontWeight: '700' },
   identity: { gap: 3 },
   inlineStats: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 2 },
   bio: { marginTop: 4 },

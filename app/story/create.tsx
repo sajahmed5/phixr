@@ -1,3 +1,4 @@
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -6,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BRAND } from '@/constants/config';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import { listGroups, type AudienceGroup } from '@/lib/groups';
@@ -65,15 +67,24 @@ export default function StoryCreateScreen() {
       setBusy(false);
       Alert.alert(
         'Could not post',
-        e instanceof Error && e.message.includes('video_too_long') ? 'Videos must be 15 seconds or less.' : 'Please try again.',
+        e instanceof Error && e.message.includes('video_too_long')
+          ? 'Videos must be 15 seconds or less.'
+          : 'Please try again.',
       );
     }
   };
 
   return (
     <View style={styles.container}>
+      <StatusBar style="light" />
       {type === 'video' ? (
-        <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} pointerEvents="none" />
+        <VideoView
+          player={player}
+          style={StyleSheet.absoluteFill}
+          contentFit="contain"
+          nativeControls={false}
+          pointerEvents="none"
+        />
       ) : (
         <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" />
       )}
@@ -81,7 +92,9 @@ export default function StoryCreateScreen() {
       {/* overlay preview */}
       {overlay.trim() && !editing ? (
         <Pressable style={styles.overlayWrap} onPress={() => setEditing(true)}>
-          <ThemedText type="title" style={styles.overlayText}>{overlay}</ThemedText>
+          <ThemedText type="title" style={styles.overlayText}>
+            {overlay}
+          </ThemedText>
         </Pressable>
       ) : null}
 
@@ -98,18 +111,24 @@ export default function StoryCreateScreen() {
             onBlur={() => setEditing(false)}
           />
           <Pressable onPress={() => setEditing(false)} style={styles.doneBtn}>
-            <ThemedText type="smallBold" style={{ color: '#fff' }}>Done</ThemedText>
+            <ThemedText type="smallBold" style={{ color: '#fff' }}>
+              Done
+            </ThemedText>
           </Pressable>
         </View>
       ) : null}
 
       <View style={[styles.top, { top: insets.top + 12 }]}>
-        <Pressable onPress={() => router.back()} hitSlop={10}><Ionicons name="close" size={28} color="#fff" /></Pressable>
+        <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Ionicons name="close" size={28} color="#fff" />
+        </Pressable>
         {/* Images arrive already edited (text burned in via the shared editor). Video
             bypasses the editor, so it keeps the lightweight view-time text overlay. */}
         {type === 'video' ? (
           <Pressable onPress={() => setEditing(true)} hitSlop={10} style={styles.aa}>
-            <ThemedText type="smallBold" style={{ color: '#fff' }}>Aa</ThemedText>
+            <ThemedText type="smallBold" style={{ color: '#fff' }}>
+              Aa
+            </ThemedText>
           </Pressable>
         ) : null}
       </View>
@@ -165,12 +184,17 @@ export default function StoryCreateScreen() {
         </View>
       ) : null}
 
-      <Pressable onPress={share} disabled={busy} style={[styles.share, { bottom: insets.bottom + 16, backgroundColor: theme.tint }]}>
+      <Pressable
+        onPress={share}
+        disabled={busy}
+        style={[styles.share, { bottom: insets.bottom + 16, backgroundColor: BRAND.accent }]}>
         {busy ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <>
-            <ThemedText type="smallBold" style={{ color: '#fff' }}>Add to story</ThemedText>
+            <ThemedText type="smallBold" style={{ color: '#fff' }}>
+              Add to story
+            </ThemedText>
             <Ionicons name="arrow-forward" size={18} color="#fff" />
           </>
         )}
@@ -182,14 +206,90 @@ export default function StoryCreateScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   overlayWrap: { position: 'absolute', top: '45%', left: 20, right: 20, alignItems: 'center' },
-  overlayText: { color: '#fff', textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
-  editLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', paddingHorizontal: 24 },
-  editInput: { color: '#fff', fontSize: 26, fontWeight: '700', textAlign: 'center', maxHeight: 200 },
-  doneBtn: { position: 'absolute', top: 60, right: 20, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)' },
-  top: { position: 'absolute', left: 16, right: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  aa: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
-  share: { position: 'absolute', right: 16, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 999 },
-  audienceChip: { position: 'absolute', left: 16, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.55)', maxWidth: '55%' },
-  audienceSheet: { position: 'absolute', left: 16, gap: 2, padding: 8, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.75)' },
-  audienceRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 9 },
+  overlayText: {
+    color: '#fff',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowRadius: 6,
+    textShadowOffset: { width: 0, height: 1 },
+  },
+  editLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  editInput: {
+    color: '#fff',
+    fontSize: 26,
+    fontWeight: '700',
+    textAlign: 'center',
+    maxHeight: 200,
+  },
+  doneBtn: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  top: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  aa: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  share: {
+    position: 'absolute',
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 999,
+  },
+  audienceChip: {
+    position: 'absolute',
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    maxWidth: '55%',
+  },
+  audienceSheet: {
+    position: 'absolute',
+    left: 16,
+    gap: 2,
+    padding: 8,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+  },
+  audienceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
 });
