@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.phixr.app",
+      "sha256_cert_fingerprints": [
+        "57:71:C2:8F:65:91:B9:8D:32:C0:67:F5:18:12:C7:AB:53:6E:48:A1:4C:EF:CF:E8:F3:87:ED:77:78:96:19:04",
+        "D4:88:7F:3D:8D:4D:0A:BE:6F:0E:BF:9D:6B:94:D3:49:EA:B6:C7:53:0E:2A:E4:A1:C6:17:DE:7B:03:DE:28:EE"
+      ]
+    }
+  }
+]
