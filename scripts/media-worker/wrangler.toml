@@ -1,0 +1,20 @@
+# Cloudflare Worker serving Phixr media from R2. Deploy from the repo root:
+#   npx wrangler deploy --config scripts/media-worker/wrangler.toml
+# Secrets (set once, never committed):
+#   npx wrangler secret put SIGNING_SECRET --config scripts/media-worker/wrangler.toml
+#   npx wrangler secret put UPLOAD_SECRET  --config scripts/media-worker/wrangler.toml
+# The same two values live in Supabase Vault as media_signing_secret / media_upload_secret.
+
+name = "phixr-media"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+routes = [{ pattern = "media.phixrcdn.com", custom_domain = true }]
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "phixr-media"
+jurisdiction = "eu"  # files stay in the EU (UK-first app; UK GDPR adequacy)
+
+[observability]
+enabled = true

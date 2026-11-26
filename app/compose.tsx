@@ -3,10 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -27,6 +25,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { isBusinessProfile } from '@/lib/account-type';
 import { useOnline } from '@/lib/connectivity';
+import { useKeyboardHeight } from '@/lib/use-keyboard-height';
 import { listGroups, type AudienceGroup } from '@/lib/groups';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import {
@@ -52,6 +51,9 @@ export default function ComposeScreen() {
   const theme = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardHeight();
+  const scrollRef = useRef<ScrollView>(null);
+  const captionY = useRef(0);
   const { composition, updateDraft, submit, retryUpload, clear, queueOffline } = useUpload();
   const { user, profile } = useAuth();
   const online = useOnline();
@@ -294,12 +296,14 @@ export default function ComposeScreen() {
 
   return (
     <ThemedView style={styles.fill}>
-      <KeyboardAvoidingView
-        style={styles.fill}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Lift the form and the Post button above the keyboard. (KeyboardAvoidingView
+          mis-measures inside this sheet-style modal and left the caption under it.) */}
+      <View style={[styles.fill, { paddingBottom: keyboard }]}>
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
-          keyboardShouldPersistTaps="handled">
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive">
           {/* Preview */}
           <View style={styles.previewWrap}>
             {media.type === 'video' ? (
@@ -357,11 +361,18 @@ export default function ComposeScreen() {
           {rejection ? <FormMessage tone="error">{rejection}</FormMessage> : null}
 
           {/* Caption */}
-          <View>
+          <View onLayout={(e) => (captionY.current = e.nativeEvent.layout.y)}>
             <TextField
               label="Caption"
               placeholder="Write a caption…"
               multiline
+              onFocus={() =>
+                // Wait for the keyboard padding to apply, then bring the caption into view.
+                setTimeout(
+                  () => scrollRef.current?.scrollTo({ y: Math.max(0, captionY.current - 12), animated: true }),
+                  250,
+                )
+              }
               value={draft.caption}
               maxLength={CAPTION_MAX}
               onChangeText={(t) => updateDraft({ caption: t })}
@@ -530,7 +541,8 @@ export default function ComposeScreen() {
           style={[
             styles.postBar,
             {
-              paddingBottom: insets.bottom + 12,
+              // No home-indicator gap while the keyboard is up (it covers that area).
+              paddingBottom: keyboard > 0 ? 12 : insets.bottom + 12,
               borderTopColor: theme.border,
               backgroundColor: theme.background,
             },
@@ -616,7 +628,7 @@ export default function ComposeScreen() {
             </ThemedText>
           ) : null}
         </View>
-      </KeyboardAvoidingView>
+      </View>
       {/* This route is presented as a modal, which iOS puts in its own container —
           the app-wide button can't reach it. */}
       <ReportFab />

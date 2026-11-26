@@ -13,6 +13,7 @@
 //   - the admin dashboard, via the `x-admin-secret` header + `target_user_id` in the body.
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
+import { r2DeleteFolder } from '../_shared/r2.ts';
 import { reportError, withSentry } from '../_shared/sentry.ts';
 
 // Every bucket a user owns objects in, EXCEPT `evidence` (legal retention).
@@ -85,6 +86,8 @@ Deno.serve(
       for (const bucket of USER_BUCKETS) {
         deleted[bucket] = await purgeBucket(svc, bucket, uid);
       }
+      // The Cloudflare R2 copy of their media (same {uid}/ keys).
+      deleted['r2'] = await r2DeleteFolder(svc, uid);
 
       // 2. Delete the auth user → cascades all DB rows.
       const { error: delErr } = await svc.auth.admin.deleteUser(uid);

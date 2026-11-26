@@ -28,7 +28,17 @@ import {
 } from './storage.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.45.4';
 
+import { r2CopyFromStorage, r2Put } from '../_shared/r2.ts';
 import { reportError, withSentry } from '../_shared/sentry.ts';
+
+// Copy finished media to Cloudflare R2 after the response has gone back to the phone
+// (best effort: the r2-sync job catches anything missed, and the app reads from
+// Supabase until a key is in R2).
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
+function inBackground(p: Promise<unknown>): void {
+  if (typeof EdgeRuntime !== 'undefined') EdgeRuntime.waitUntil(p);
+  else p.catch(() => {});
+}
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -157,6 +167,10 @@ Deno.serve(withSentry('media-pipeline', async (req) => {
     // Record the verdict so the post the client creates inherits this status.
     await recordVerdict(svc, mediaPath, owner, moderationStatus);
     await removeObjects(svc, STAGING_BUCKET, [stagingPath]); // staging no longer needed
+    inBackground(Promise.all([
+      r2Put(svc, mediaPath, processed.display, processed.mime, processed.display.byteLength),
+      r2Put(svc, thumbPath, processed.thumbnail, processed.mime, processed.thumbnail.byteLength),
+    ]));
 
     // ===== STEP 7: build suggestions + response =====
     const suggestions = await buildSuggestions(svc, exif, vision.labels);
@@ -232,6 +246,10 @@ async function handleVideo(args: {
     const moderationStatus = vision.decision === 'flag' ? 'flagged' : 'approved';
     await recordVerdict(svc, t.mediaPath, owner, moderationStatus);
     await removeObjects(svc, STAGING_BUCKET, [args.stagingPath]);
+    inBackground(Promise.all([
+      r2CopyFromStorage(svc, t.mediaPath, 'video/mp4'),
+      r2Put(svc, t.posterPath, poster, 'image/jpeg', poster.byteLength),
+    ]));
 
     const suggestions = await buildSuggestions(svc, exif, vision.labels);
     return json({

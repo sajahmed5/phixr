@@ -288,7 +288,9 @@ export function MediaEditor({
     // Give React a frame to drop selection chrome before the snapshot.
     setTimeout(async () => {
       try {
-        const out = await exportEditedImage(captureRef, nextId('exp'));
+        // Unique across app launches: nextId's counter restarts at 1 on every launch, so a
+        // reused file name made the composer preview show the previous session's photo.
+        const out = await exportEditedImage(captureRef, `${Date.now()}-${nextId('exp')}`);
         onDone(out);
       } catch {
         setExporting(false);

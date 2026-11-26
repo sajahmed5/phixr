@@ -6,6 +6,7 @@
 // ============================================================================
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
+import { r2Delete } from '../_shared/r2.ts';
 import { withSentry } from '../_shared/sentry.ts';
 
 const SECRET = Deno.env.get('PUSH_WEBHOOK_SECRET') ?? '';
@@ -40,6 +41,7 @@ Deno.serve(withSentry('story-reaper', async (req) => {
   if (keys.length) {
     const { error: rmErr } = await svc.storage.from('media').remove(keys);
     if (rmErr) console.error('[story-reaper] storage remove:', rmErr.message);
+    await r2Delete(svc, keys);
   }
 
   // 3. delete the rows (cascade removes story_views)

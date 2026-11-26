@@ -141,6 +141,7 @@ export default function SettingsScreen() {
         'Your export is ready',
         `A downloadable archive of your data${mediaCount ? ` and ${mediaCount} media files` : ''} has been prepared. The link is valid for 24 hours.`,
         'Download',
+        false,
       );
       if (ok) void Linking.openURL(url);
     } catch {
