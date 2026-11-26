@@ -132,8 +132,12 @@ function useAuthGuard(status: AuthStatus) {
     const inOnboarding = parts[0] === '(onboarding)';
     const signupStep = parts[2];
 
+    // Pages anyone may read without an account: the legal documents (Google Play and the
+    // App Store link to the privacy policy) and how to delete an account.
+    const isPublic = (parts[0] === 'legal' && parts[1] !== 'accept') || parts[0] === 'account-deletion';
+
     if (status === 'signedOut') {
-      if (!inAuth) {
+      if (!inAuth && !isPublic) {
         if (parts[0] === 'oauth') rememberOAuthReturn();
         router.replace('/(auth)/login');
       }
@@ -282,6 +286,7 @@ function RootNavigator() {
       <Stack.Screen name="settings/sessions" options={{ headerShown: true, title: 'Devices & sessions' }} />
       <Stack.Screen name="settings/connected-apps" options={{ headerShown: true, title: 'Connected apps' }} />
       <Stack.Screen name="oauth/authorize" options={{ headerShown: true, title: 'Connect an app' }} />
+      <Stack.Screen name="account-deletion" options={{ headerShown: true, title: 'Delete your account' }} />
       <Stack.Screen name="recover" options={{ headerShown: true, title: 'Account recovery' }} />
     </Stack>
   );
