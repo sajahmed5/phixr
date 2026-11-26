@@ -46,7 +46,9 @@ export default function TabsLayout() {
           position: 'absolute',
           left: TAB_BAR.side,
           right: TAB_BAR.side,
-          bottom: insets.bottom + TAB_BAR.bottom,
+          // Half the old gap (home-indicator inset + padding): the bar sat too high on
+          // iPhones. Phones without a bottom inset keep the minimum padding.
+          bottom: Math.max(TAB_BAR.bottom, Math.round((insets.bottom + TAB_BAR.bottom) / 2)),
           height: TAB_BAR.height,
           borderRadius: TAB_BAR.height / 2,
           backgroundColor: TAB_BAR_FILL[scheme === 'dark' ? 'dark' : 'light'],
