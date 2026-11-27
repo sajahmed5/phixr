@@ -25,7 +25,8 @@ import type { DeckCard, SwipeDirection } from '@/lib/deck';
 const VELOCITY_THRESHOLD = 800;
 const PROGRESS_DISTANCE = 180; // px of drag that maps the beneath-card to full size
 const FLY_MS = 200;
-const HEART_HOLD_MS = 550; // how long the heart shows before the card flies off on a like
+const HEART_HOLD_MS = 550;
+const TAP_SLOP = 10; // px a finger may move and still count as a tap // how long the heart shows before the card flies off on a like
 
 type SwipeDeckProps = {
   hasTabBar?: boolean;
@@ -303,6 +304,7 @@ function DeckCardView({
   // so the pan (which needs 12px of movement) never activates, and vice-versa.
   const doubleTap = Gesture.Tap()
     .enabled(isTop && !fullView)
+    .maxDistance(TAP_SLOP)
     .numberOfTaps(2)
     .maxDuration(260)
     .runOnJS(true)
@@ -315,6 +317,9 @@ function DeckCardView({
   // In full view a single tap brings the info back instead (#79).
   const singleTap = Gesture.Tap()
     .enabled(isTop && (shotCount > 1 || fullView))
+    // Without a distance limit a tap still "recognises" after the fingers travel, so a
+    // quick pinch also paged the carousel (seen on the simulator, 27 Nov).
+    .maxDistance(TAP_SLOP)
     .numberOfTaps(1)
     .runOnJS(true)
     .onEnd(() => {
