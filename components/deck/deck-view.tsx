@@ -36,6 +36,14 @@ type DeckViewProps = {
   /** Keep the unseen cards on the phone so this deck still shows something when opened
    *  with no signal. Set only on the main feed. */
   persistKey?: string;
+  /** Home's full-screen layout (#78/#79): room for the overlay bar, and full view. */
+  topInset?: number;
+  fullView?: boolean;
+  onFullViewChange?: (on: boolean) => void;
+  /** Overlay bar drawn over the top of the deck (Home's logo + search). `onMedia` is true
+   *  while a photo is behind it; otherwise (loading, empty, error) the deck body is pushed
+   *  below the bar and the bar should use normal theme colours. */
+  topBar?: (opts: { onMedia: boolean }) => React.ReactNode;
 };
 
 /**
@@ -44,7 +52,17 @@ type DeckViewProps = {
  * state machine. The two tabs differ only by the `fetchBatch` they pass and the optional
  * `header` / `renderEmpty` slots — there is a single deck implementation.
  */
-export function DeckView({ fetchBatch, header, renderEmpty, hasTabBar = true, persistKey }: DeckViewProps) {
+export function DeckView({
+  fetchBatch,
+  header,
+  renderEmpty,
+  hasTabBar = true,
+  persistKey,
+  topInset = 0,
+  fullView,
+  onFullViewChange,
+  topBar,
+}: DeckViewProps) {
   const { cards, status, canUndo, pendingWrites, swipe, undo, retry, adjustCommentCount } =
     useDeck(fetchBatch, { persistKey });
   const router = useRouter();
@@ -87,10 +105,13 @@ export function DeckView({ fetchBatch, header, renderEmpty, hasTabBar = true, pe
           canUndo={canUndo}
           onUndo={undo}
           hideCounts={hideCounts}
+          topInset={topInset}
+          fullView={fullView}
+          onFullViewChange={onFullViewChange}
         />
         {/* Only surface a real backlog (e.g. offline) — a single in-flight write shouldn't
             flash on every swipe and make it feel janky. */}
-        {pendingWrites > 3 ? <PendingPill count={pendingWrites} top={8} /> : null}
+        {pendingWrites > 3 ? <PendingPill count={pendingWrites} top={8 + topInset} /> : null}
       </View>
     );
   } else if (status === 'offline') {
@@ -107,7 +128,8 @@ export function DeckView({ fetchBatch, header, renderEmpty, hasTabBar = true, pe
   return (
     <View style={styles.container}>
       {header}
-      <View style={styles.body}>{body}</View>
+      <View style={[styles.body, cards.length === 0 && { paddingTop: topInset }]}>{body}</View>
+      {topBar?.({ onMedia: cards.length > 0 })}
       {commentsCard ? (
         <CommentSheet
           postId={commentsCard.id}

@@ -19,20 +19,31 @@ import { reportVideoCompleted, reportVideoPosition } from '@/lib/video-progress'
 
 const VIDEO_CAP_SECONDS = 60;
 
+/** How the media fills the card: cropped full-bleed, or the whole frame (full view, #79). */
+export type MediaFit = 'cover' | 'contain';
+
 /** Full-bleed media for a card. Video plays only while the card is focused (the top card). */
-export function CardMedia({ card, isActive }: { card: DeckCard; isActive: boolean }) {
+export function CardMedia({
+  card,
+  isActive,
+  fit = 'cover',
+}: {
+  card: DeckCard;
+  isActive: boolean;
+  fit?: MediaFit;
+}) {
   if (card.media_type === 'video') {
-    return <CardVideo card={card} isActive={isActive} />;
+    return <CardVideo card={card} isActive={isActive} fit={fit} />;
   }
-  return <CardImage card={card} />;
+  return <CardImage card={card} fit={fit} />;
 }
 
-function CardImage({ card }: { card: DeckCard }) {
+function CardImage({ card, fit }: { card: DeckCard; fit: MediaFit }) {
   return (
     <Image
       source={mediaSource(card.media_url)}
       style={StyleSheet.absoluteFill}
-      contentFit="cover"
+      contentFit={fit}
       transition={180}
       recyclingKey={card.id}
       accessibilityRole="image"
@@ -42,7 +53,7 @@ function CardImage({ card }: { card: DeckCard }) {
   );
 }
 
-function CardVideo({ card, isActive }: { card: DeckCard; isActive: boolean }) {
+function CardVideo({ card, isActive, fit }: { card: DeckCard; isActive: boolean; fit: MediaFit }) {
   const overlays = useMemo(() => parseVideoOverlays(card.overlays), [card.overlays]);
   const [box, setBox] = useState({ w: 0, h: 0 });
   // Mute follows the global, persisted preference — an unmute carries to the next card and
@@ -136,7 +147,7 @@ function CardVideo({ card, isActive }: { card: DeckCard; isActive: boolean }) {
       <Image
         source={mediaSource(card.thumbnail_url)}
         style={StyleSheet.absoluteFill}
-        contentFit="cover"
+        contentFit={fit}
         recyclingKey={card.id}
         accessibilityRole="image"
         accessibilityLabel={card.alt_text || card.caption || 'Post video'}
@@ -149,7 +160,7 @@ function CardVideo({ card, isActive }: { card: DeckCard; isActive: boolean }) {
       <VideoView
         player={player}
         style={StyleSheet.absoluteFill}
-        contentFit="cover"
+        contentFit={fit}
         nativeControls={false}
         pointerEvents="none"
       />

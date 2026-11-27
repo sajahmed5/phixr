@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -27,10 +28,33 @@ type AuthScreenProps = {
   footer?: ReactNode;
 };
 
+/** True while the software keyboard is on screen. */
+function useKeyboardVisible() {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    // iOS has will-events (no flash); Android only fires did-events.
+    const show = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hide = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const a = Keyboard.addListener(show, () => setVisible(true));
+    const b = Keyboard.addListener(hide, () => setVisible(false));
+    return () => {
+      a.remove();
+      b.remove();
+    };
+  }, []);
+  return visible;
+}
+
 /** Consistent scaffold for auth screens: safe area, keyboard avoidance, title block. */
 export function AuthScreen({ title, subtitle, children, onBack, brand, footer }: AuthScreenProps) {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  // While typing, the footer scrolls with the form instead of sticking above the keyboard.
+  // Sticky, a tall footer (log in + links + "Create an account") took nearly all the
+  // space left above the keyboard and hid the fields under it — on the login screen the
+  // password box vanished behind the Log in button (reported 27 Nov).
+  const keyboardUp = useKeyboardVisible();
+  const footerInline = !!footer && keyboardUp;
 
   return (
     <ThemedView style={styles.root}>
@@ -70,9 +94,10 @@ export function AuthScreen({ title, subtitle, children, onBack, brand, footer }:
           </View>
 
           <View style={styles.body}>{children}</View>
+          {footerInline ? <View style={styles.footerInline}>{footer}</View> : null}
         </ScrollView>
 
-        {footer ? (
+        {footer && !footerInline ? (
           <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>{footer}</View>
         ) : null}
       </KeyboardAvoidingView>
@@ -95,6 +120,7 @@ const styles = StyleSheet.create({
   brand: { alignItems: 'center', paddingTop: 8 },
   header: { gap: 6 },
   body: { gap: 18 },
+  footerInline: { gap: 12 },
   footer: {
     paddingHorizontal: 24,
     paddingTop: 12,
