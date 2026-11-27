@@ -37,6 +37,7 @@ import { formatCount } from '@/lib/format';
 import { getExtrasForPosts, type PostMediaItem } from '@/lib/posts';
 import { resolveDeckMedia } from '@/lib/media';
 import { formatRelative } from '@/lib/relative-time';
+import { getMuted, setMutedPreference, subscribeMute } from '@/lib/mute-preference';
 import { cachedVideoUri } from '@/lib/video-cache';
 
 const PAGE = 15;
@@ -371,18 +372,45 @@ function FeedVideo({ uri, overlays, active }: { uri: string; overlays?: unknown;
   const [box, setBox] = useState({ w: 0, h: 0 });
   // A copy downloaded ahead on Wi-Fi plays without the network; otherwise it streams.
   const source = useMemo(() => cachedVideoUri(uri), [uri]);
+  // Same global, persisted mute preference as the Home deck: muted until the user
+  // unmutes once, then that choice carries across cards, tabs and sessions.
+  const [muted, setMuted] = useState(getMuted());
   const player = useVideoPlayer(source, (p) => {
     p.loop = true;
-    p.muted = true;
+    p.muted = getMuted();
   });
+  useEffect(() => subscribeMute((m) => {
+    player.muted = m;
+    setMuted(m);
+  }), [player]);
   useEffect(() => {
-    if (active) player.play();
-    else player.pause();
+    if (active) {
+      // eslint-disable-next-line react-hooks/immutability -- expo-video's player is a mutable controller by design
+      player.muted = getMuted();
+      player.play();
+    } else player.pause();
   }, [active, player]);
+  function toggleMute() {
+    const next = !muted;
+    // eslint-disable-next-line react-hooks/immutability -- expo-video's player is a mutable controller by design
+    player.muted = next;
+    setMuted(next);
+    setMutedPreference(next);
+  }
   return (
     <View onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
-      <VideoView player={player} style={styles.media} contentFit="cover" nativeControls={false} />
+      {/* pointerEvents="none": the native VideoView otherwise swallows taps above the JS
+          layer (same fix as the Home deck), which would block the mute button. */}
+      <VideoView player={player} style={styles.media} contentFit="cover" nativeControls={false} pointerEvents="none" />
       <VideoOverlays overlays={overlaysParsed} width={box.w} height={box.h} />
+      <Pressable
+        onPress={toggleMute}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={muted ? 'Unmute video' : 'Mute video'}
+        style={({ pressed }) => [styles.muteBadge, pressed && { opacity: 0.7 }]}>
+        <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={16} color="#fff" />
+      </Pressable>
     </View>
   );
 }
@@ -392,6 +420,7 @@ const styles = StyleSheet.create({
   card: { borderBottomWidth: StyleSheet.hairlineWidth, paddingBottom: 12, marginBottom: 4 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
   media: { width: '100%', aspectRatio: 4 / 5, backgroundColor: '#111' },
+  muteBadge: { position: 'absolute', bottom: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999, padding: 8 },
   pagePill: { position: 'absolute', top: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 8 },
   dot: { width: 6, height: 6, borderRadius: 3 },
