@@ -213,6 +213,8 @@ function DeckCardView({
   const flyOut = useCallback(
     (direction: SwipeDirection, delayMs = 0) => {
       const sign = direction === 'right' ? 1 : -1;
+      // Grow the next card to full size while this one leaves (see growNext).
+      topProgress.value = withDelay(delayMs, withTiming(1, { duration: FLY_MS }));
       y.value = withDelay(delayMs, withTiming(y.value + 40, { duration: FLY_MS }));
       x.value = withDelay(
         delayMs,
@@ -221,7 +223,7 @@ function DeckCardView({
         }),
       );
     },
-    [onSwipe, width, x, y],
+    [onSwipe, topProgress, width, x, y],
   );
 
   // Like via double-tap or the heart button. Plays the heart, then flies off right.
@@ -287,6 +289,11 @@ function DeckCardView({
       } else if (right || left) {
         committed.value = true;
         const direction: SwipeDirection = right ? 'right' : 'left';
+        // #80 (second pass): a quick flick commits after a short drag, when the card
+        // beneath was still at ~95% with the screen showing round its edges; it then
+        // jumped to full size as it took over — the "flash". Finish growing it while
+        // this card flies off, so the hand-over is seamless.
+        topProgress.value = withTiming(1, { duration: FLY_MS });
         y.value = withTiming(e.translationY + 40, { duration: FLY_MS });
         x.value = withTiming((right ? 1.5 : -1.5) * width, { duration: FLY_MS }, (finished) => {
           if (finished) runOnJS(onSwipe)(direction);
@@ -426,7 +433,9 @@ function DeckCardView({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  // Black behind the stack: any gap round the card beneath reads as part of the photo
+  // edge, not a white flash.
+  container: { flex: 1, backgroundColor: '#000' },
   cardWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   stamp: { position: 'absolute', top: 40, pointerEvents: 'none' },
   stampLeft: { left: 24, transform: [{ rotate: '-14deg' }] },
