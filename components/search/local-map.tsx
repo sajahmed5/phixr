@@ -244,7 +244,7 @@ export function LocalMap({ query, category }: { query: string; category: SearchC
                     type={c.venues[0].is_business ? 'smallBold' : 'small'}
                     style={styles.pinText}
                     numberOfLines={1}>
-                    {c.venues[0].name} · {c.venues[0].post_count}
+                    {c.venues[0].name ?? 'Tagged spot'} · {c.venues[0].post_count}
                   </ThemedText>
                 </View>
                 <View style={[styles.pinStem, { backgroundColor: c.venues[0].is_business ? BRAND.accent : PIN_DARK }]} />
@@ -378,6 +378,15 @@ export function LocalMap({ query, category }: { query: string; category: SearchC
 /** Neutral pin colour for customer-tagged (unclaimed) places. */
 const PIN_DARK = '#2A2A28';
 
+// Lifts chips off the map tiles; kept subtle so iOS marker bitmaps don't clip it.
+const PIN_SHADOW = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.18,
+  shadowRadius: 3,
+  elevation: 3,
+} as const;
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
@@ -391,6 +400,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#fff',
     maxWidth: 180,
+    ...PIN_SHADOW,
   },
   bizPin: { backgroundColor: BRAND.accent, paddingHorizontal: 10, paddingVertical: 5 },
   gemPin: { backgroundColor: PIN_DARK, paddingHorizontal: 8, paddingVertical: 4 },
@@ -405,6 +415,7 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+    ...PIN_SHADOW,
   },
   mergePin: {
     minWidth: 30,
@@ -414,6 +425,7 @@ const styles = StyleSheet.create({
     backgroundColor: BRAND.accent,
     alignItems: 'center',
     justifyContent: 'center',
+    ...PIN_SHADOW,
   },
   pinText: { color: '#fff' },
   card: {
