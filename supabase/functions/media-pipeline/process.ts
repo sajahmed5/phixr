@@ -11,6 +11,7 @@ import { readExif, readPixelDimensions } from './exif.ts';
 import { readDimensions } from './dimensions.ts';
 import { processImage, verifyStripped } from './image.ts';
 import { scanAndLabel, type LabelSuggestion } from './vision.ts';
+import { applyTagRules } from './tag-rules.ts';
 import { stubScanner } from './csam.ts';
 import { coarseLocationCell, reverseGeocode } from './geo.ts';
 import { externalTranscoder, probeDurationSeconds } from './video.ts';
@@ -127,7 +128,7 @@ export async function processUpload(svc: SupabaseClient, owner: string, bytes: U
     ]));
 
     // ===== STEP 7: build suggestions + response =====
-    const suggestions = await buildSuggestions(svc, exif, vision.labels);
+    const suggestions = await buildSuggestions(svc, exif, vision.landmarks, vision.labels);
     return json({
       media_type: 'image',
       media_url: mediaPath, // object key; client stores this on the post
@@ -205,7 +206,7 @@ async function handleVideo(args: {
       r2Put(svc, t.posterPath, poster, 'image/jpeg', poster.byteLength),
     ]));
 
-    const suggestions = await buildSuggestions(svc, exif, vision.labels);
+    const suggestions = await buildSuggestions(svc, exif, vision.landmarks, vision.labels);
     return json({
       media_type: 'video',
       media_url: t.mediaPath,
@@ -237,8 +238,11 @@ async function handleVideo(args: {
 async function buildSuggestions(
   svc: SupabaseClient,
   exif: Awaited<ReturnType<typeof readExif>>,
-  labels: LabelSuggestion[],
+  landmarks: LabelSuggestion[],
+  rawLabels: LabelSuggestion[],
 ) {
+  // Landmarks + labels, cleaned by the admin-tuned rules (tag-rules.ts).
+  const labels = await applyTagRules(svc, landmarks, rawLabels);
   const places = exif.gps ? await reverseGeocode(exif.gps) : [];
   const names = [...new Set([...labels.map((l) => l.name), ...places])];
 

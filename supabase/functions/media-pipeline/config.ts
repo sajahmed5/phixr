@@ -22,6 +22,11 @@
 //     MEDIA_UPLOADS_PER_HOUR          default 20
 //   Tagging:
 //     LABEL_MIN_CONFIDENCE            default 0.60
+//     LABEL_MAX_SUGGESTIONS           default 10 (after rules; landmarks count)
+//     VISION_LANDMARKS                default 'on' | 'off' (Vision LANDMARK_DETECTION)
+//     LANDMARK_MIN_CONFIDENCE         default 0.50
+//     LANDMARK_MAX_RESULTS            default 2
+//     TAG_RULES_CACHE_SECONDS         default 300 (public.tag_label_rules, per isolate)
 //     LOCATION_GRID_PRECISION         default 5  (geohash length ≈ ±2.4 km)
 // ============================================================================
 
@@ -64,7 +69,13 @@ export const config = {
 
   tagging: {
     labelMinConfidence: num('LABEL_MIN_CONFIDENCE', 0.6),
+    labelMaxSuggestions: num('LABEL_MAX_SUGGESTIONS', 10),
+    landmarksEnabled: str('VISION_LANDMARKS', 'on') !== 'off',
+    landmarkMinConfidence: num('LANDMARK_MIN_CONFIDENCE', 0.5),
+    landmarkMaxResults: num('LANDMARK_MAX_RESULTS', 2),
+    tagRulesCacheSeconds: num('TAG_RULES_CACHE_SECONDS', 300),
     // Uselessly generic labels that carry no signal — filtered from suggestions.
+    // Baseline only: admins tune the rest in public.tag_label_rules (fame-admin).
     genericLabelDenylist: new Set([
       'photograph', 'image', 'photography', 'picture', 'photo', 'screenshot',
       'font', 'material property', 'rectangle', 'still life photography',

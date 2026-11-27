@@ -23,6 +23,8 @@ export type VisionResult = {
   reason: string | null; // populated when decision === 'reject'
   scores: { adult: number; racy: number; violence: number } | null;
   labels: LabelSuggestion[];
+  /** Named places recognised from the pixels (e.g. "teotihuacan"), best first. */
+  landmarks: LabelSuggestion[];
 };
 
 function decide(scores: { adult: number; racy: number; violence: number }): { decision: 'reject' | 'flag' | 'approve'; reason: string | null } {
@@ -49,11 +51,26 @@ function normaliseLabels(raw: { description?: string; score?: number }[]): Label
   return out;
 }
 
+function normaliseLandmarks(raw: { description?: string; score?: number }[]): LabelSuggestion[] {
+  const t = config.tagging;
+  const seen = new Set<string>();
+  const out: LabelSuggestion[] = [];
+  for (const l of raw) {
+    const name = (l.description ?? '').trim().toLowerCase();
+    const confidence = l.score ?? 0;
+    if (!name || confidence < t.landmarkMinConfidence || seen.has(name)) continue;
+    seen.add(name);
+    out.push({ name, confidence });
+    if (out.length >= t.landmarkMaxResults) break;
+  }
+  return out;
+}
+
 /** Scan the (already stripped) display image and gather label suggestions. */
 export async function scanAndLabel(displayJpeg: Uint8Array): Promise<VisionResult> {
   if (config.visionProvider === 'none' || !config.googleVisionApiKey) {
     // No provider → cannot certify safety → caller must flag for review.
-    return { provider: 'none', decision: 'flag', reason: null, scores: null, labels: [] };
+    return { provider: 'none', decision: 'flag', reason: null, scores: null, labels: [], landmarks: [] };
   }
 
   const b64 = base64Encode(displayJpeg);
@@ -64,6 +81,9 @@ export async function scanAndLabel(displayJpeg: Uint8Array): Promise<VisionResul
       features: [
         { type: 'SAFE_SEARCH_DETECTION' },
         { type: 'LABEL_DETECTION', maxResults: 25 },
+        ...(config.tagging.landmarksEnabled
+          ? [{ type: 'LANDMARK_DETECTION', maxResults: config.tagging.landmarkMaxResults }]
+          : []),
       ],
     }],
   };
@@ -71,7 +91,7 @@ export async function scanAndLabel(displayJpeg: Uint8Array): Promise<VisionResul
   const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) {
     // A failed scan must not silently approve. Surface as flag so a human reviews.
-    return { provider: 'google', decision: 'flag', reason: null, scores: null, labels: [] };
+    return { provider: 'google', decision: 'flag', reason: null, scores: null, labels: [], landmarks: [] };
   }
   const json = await res.json();
   const r = json?.responses?.[0] ?? {};
@@ -83,7 +103,8 @@ export async function scanAndLabel(displayJpeg: Uint8Array): Promise<VisionResul
   };
   const { decision, reason } = decide(scores);
   const labels = normaliseLabels(r.labelAnnotations ?? []);
-  return { provider: 'google', decision, reason, scores, labels };
+  const landmarks = normaliseLandmarks(r.landmarkAnnotations ?? []);
+  return { provider: 'google', decision, reason, scores, labels, landmarks };
 }
 
 function base64Encode(bytes: Uint8Array): string {
