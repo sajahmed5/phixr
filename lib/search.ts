@@ -76,7 +76,9 @@ export async function getMapVenues(limit = 200): Promise<MapVenue[]> {
  * place them, so no exact position ever leaves the server.
  */
 export type MapPin = {
-  kind: 'venue' | 'cell';
+  /** 'venue_part' (Stage 3): a venue's matching posts in one ~300m fine cell
+   *  (`cell`), so a big venue like a park splits into areas when zoomed in. */
+  kind: 'venue' | 'cell' | 'venue_part';
   id: string;
   name: string | null;
   category_group: string | null;

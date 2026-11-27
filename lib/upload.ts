@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { Video } from 'react-native-compressor';
 
 import { isOnline } from '@/lib/connectivity';
+import { fineCell } from '@/lib/location';
 import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '@/lib/supabase';
 import { findOrCreateTag } from '@/lib/tags';
 import type { VideoOverlay } from '@/lib/video-overlays';
@@ -332,7 +333,10 @@ export async function createPost(input: CreatePostInput): Promise<string> {
   // Link the post to the picked place's venue (find-or-create, server-side from
   // authoritative place details) so it shows on the Local map as that place.
   // Best-effort: the post has landed either way, with its label and cell.
+  // Stage 3: with it goes the photo's ~300m square (never its GPS), which the
+  // server keeps only if it's inside the venue — "which part of the park".
   if (input.attachLocation && input.placeRef?.provider_place_id) {
+    const gps = result.suggestions.gps;
     try {
       await supabase.functions.invoke('places', {
         body: {
@@ -340,6 +344,7 @@ export async function createPost(input: CreatePostInput): Promise<string> {
           postId,
           provider: input.placeRef.provider,
           provider_place_id: input.placeRef.provider_place_id,
+          ...(gps ? { fine_cell: fineCell(gps.latitude, gps.longitude) } : {}),
         },
       });
     } catch {

@@ -13,7 +13,7 @@ import { getVenueBusiness, recordBusinessInsight, type VenueBusiness } from '@/l
 import { decodeCell } from '@/lib/location';
 import { mediaSource, signMediaPaths } from '@/lib/media';
 import { setPendingPlace } from '@/lib/pending-place';
-import { placeHref } from '@/lib/places';
+import { placeHref, venuePartHref } from '@/lib/places';
 import {
   getCellPosts,
   getMapPins,
@@ -54,6 +54,11 @@ import {
  * starts tagged at that place, and once it lands the place becomes a photo
  * pin (the server links suggestions to known venues, so it never shows twice).
  * As content grows it fills the budget and hollow pins stop appearing.
+ *
+ * Stage 3: posts tagged to a venue can carry the photo's ~300m square (kept by
+ * the server only when it's inside the venue). Zoomed right in, a venue whose
+ * photos span several squares — a park — shows a count bubble per area, and
+ * tapping one opens the photos from that part.
  */
 
 /** Stage 1 budget: at most this many venue pins in view at once. */
@@ -63,6 +68,9 @@ const SPONSORED_SLOTS = 2;
 /** Below this latitudeDelta (~4.4km tall viewport) Apple's own POI labels are
  *  hidden, so at street zoom Phixr pins are the only pins. */
 const STREET_ZOOM_DELTA = 0.04;
+/** Stage 3: below this latitudeDelta (~1.3km tall viewport) big venues split
+ *  into ~300m areas. */
+const PART_ZOOM_DELTA = 0.012;
 /** Stage 2: at most this many hollow "be the first" pins, and only in budget
  *  slots the photo pins leave free. */
 const MAX_SUGGESTED = 8;
@@ -185,6 +193,17 @@ export function LocalMap({
         .filter((p): p is CellPin => !!p && !!p.centre),
     [pins],
   );
+  // Stage 3: each venue's matching posts by ~300m fine cell.
+  const partsByVenue = useMemo(() => {
+    const m = new Map<string, CellPin[]>();
+    for (const p of pins ?? []) {
+      if (p.kind !== 'venue_part' || !p.cell) continue;
+      const centre = decodeCell(p.cell);
+      if (!centre) continue;
+      m.set(p.id, [...(m.get(p.id) ?? []), { ...p, centre }]);
+    }
+    return m;
+  }, [pins]);
 
   useEffect(() => {
     let alive = true;
@@ -363,6 +382,18 @@ export function LocalMap({
     () => (region ? clusterVenues(budgeted, region) : []),
     [budgeted, region],
   );
+
+  // Stage 3: zoomed right in, a budgeted venue whose photos span 2+ areas
+  // (a park) also shows a small count bubble per ~300m area, so you can see
+  // which part of it people photographed. Parts ride on their venue's budget
+  // slot; a restaurant's photos share one square, so it never splits.
+  const partPins = useMemo(() => {
+    if (!region || region.latitudeDelta >= PART_ZOOM_DELTA) return [];
+    const onMap = new Set(clusters.filter((c) => c.venues.length === 1).map((c) => c.venues[0].id));
+    return [...partsByVenue.entries()]
+      .filter(([id, parts]) => onMap.has(id) && parts.length >= 2)
+      .flatMap(([, parts]) => parts.filter((p) => inRegion(p.centre.lat, p.centre.lon, region)));
+  }, [region, clusters, partsByVenue]);
   const overflowClusters = useMemo(
     () => (region ? clusterVenues(overflow, region) : []),
     [overflow, region],
@@ -419,6 +450,20 @@ export function LocalMap({
         // pins are the only pins on the map.
         showsPointsOfInterests={(region?.latitudeDelta ?? 1) >= STREET_ZOOM_DELTA}
         toolbarEnabled={false}>
+        {/* Stage 3: areas of a big venue, under its name chip. Tapping opens
+            just the photos from that part. */}
+        {partPins.map((p) => (
+          <Marker
+            key={`pt-${p.id}-${p.cell}`}
+            coordinate={{ latitude: p.centre.lat, longitude: p.centre.lon }}
+            onPress={() => router.push(venuePartHref(p.id, p.cell!, `${p.name ?? 'This place'} · this area`))}>
+            <View style={[styles.partPin, { backgroundColor: p.is_business ? BRAND.accent : PIN_DARK }]}>
+              <ThemedText type="smallBold" style={styles.partText}>
+                {p.post_count}
+              </ThemedText>
+            </View>
+          </Marker>
+        ))}
         {/* Stage 2: real places with no matching photos yet — hollow, grey,
             and drawn first so photo pins always sit on top. */}
         {hollowPins.map((s) => (
@@ -743,6 +788,20 @@ const styles = StyleSheet.create({
   },
   // Beyond-the-budget "+N" bubble: visually quieter than the accent merge
   // bubble, so the budgeted chips stay the loudest thing on the map.
+  // Stage 3 area bubble: small and slightly see-through, so the venue's name
+  // chip stays the main mark and the bubbles read as "parts of it".
+  partPin: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    borderWidth: 2,
+    borderColor: '#fff',
+    opacity: 0.85,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  partText: { color: '#fff', fontSize: 11, lineHeight: 14 },
   overflowPin: {
     minWidth: 30,
     height: 30,

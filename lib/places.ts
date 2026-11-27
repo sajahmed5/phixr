@@ -61,6 +61,11 @@ export function placeHref(p: PostPlace): Href {
   };
 }
 
+/** Route to one part of a venue (Stage 3): its posts in that ~300m square. */
+export function venuePartHref(venueId: string, cell: string, label: string): Href {
+  return { pathname: '/place', params: { venue: venueId, cell, label } };
+}
+
 export type PlacePost = {
   id: string;
   user_id: string;
