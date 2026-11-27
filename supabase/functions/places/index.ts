@@ -45,8 +45,13 @@ const CORS = {
 };
 const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'content-type': 'application/json' } });
 
-type Candidate = { provider: string; provider_place_id: string; name: string; category: string | null; address: string | null; lat: number | null; lon: number | null; distance_m: number | null };
 type Bounds = { north: number; south: number; east: number; west: number };
+type Candidate = {
+  provider: string; provider_place_id: string; name: string; category: string | null; address: string | null;
+  lat: number | null; lon: number | null; distance_m: number | null;
+  /** The place's real area (Apple displayMapRegion / Google viewport), when known. */
+  extent?: Bounds | null;
+};
 
 // ---- Apple Maps Server API -------------------------------------------------
 // A developer token (ES256 JWT signed with the MapKit key) is exchanged for a
@@ -90,8 +95,10 @@ async function appleGet(path: string, params: Record<string, string>): Promise<R
 
 type AppleResult = {
   id?: string;
+  alternateIds?: string[];
   name?: string;
   coordinate?: { latitude?: number; longitude?: number };
+  displayMapRegion?: { northLatitude?: number; southLatitude?: number; eastLongitude?: number; westLongitude?: number };
   formattedAddressLines?: string[];
   poiCategory?: string;
 };
@@ -131,7 +138,14 @@ function mapApple(r: AppleResult, fromLat: number | null, fromLon: number | null
     address: (lines[0] === r.name ? lines.slice(1) : lines).join(', ') || null,
     lat, lon,
     distance_m: fromLat != null && fromLon != null && lat != null && lon != null ? Math.round(haversine(fromLat, fromLon, lat, lon)) : null,
+    extent: appleExtent(r),
   };
+}
+
+function appleExtent(r: AppleResult): Bounds | null {
+  const d = r.displayMapRegion;
+  if (!d || !isNum(d.northLatitude) || !isNum(d.southLatitude) || !isNum(d.eastLongitude) || !isNum(d.westLongitude)) return null;
+  return { north: d.northLatitude, south: d.southLatitude, east: d.eastLongitude, west: d.westLongitude };
 }
 
 const appleResults = (j: Record<string, unknown>) => ((j.results ?? []) as AppleResult[]);
@@ -186,8 +200,12 @@ async function appleDetails(placeId: string): Promise<Candidate | null> {
     // category chip, so recover it from a name search at the same spot.
     if (!c.category && c.lat != null && c.lon != null) {
       const s = await appleGet('/v1/search', { q: c.name, searchLocation: `${c.lat},${c.lon}`, resultTypeFilter: 'Poi' }).catch(() => ({ results: [] }));
-      const same = appleResults(s).find((r) => r.id === c.provider_place_id);
-      c.category = appleCategory(same?.poiCategory);
+      const same = appleResults(s).find(
+        (r) => r.id === c.provider_place_id || (r.alternateIds ?? []).includes(c.provider_place_id),
+      );
+      // Only real places carry an Apple id (cities and areas have none), so an
+      // unrecovered category is still a venue, just an uncategorised one.
+      c.category = appleCategory(same?.poiCategory) ?? 'point_of_interest';
     }
     return c;
   } catch {
@@ -262,11 +280,28 @@ async function googleGeocode(query: string, limit: number): Promise<{ label: str
 
 async function googleDetails(placeId: string): Promise<Candidate | null> {
   const res = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`, {
-    headers: { 'X-Goog-Api-Key': GOOGLE_KEY, 'X-Goog-FieldMask': 'id,displayName,primaryType,formattedAddress,location' },
+    headers: { 'X-Goog-Api-Key': GOOGLE_KEY, 'X-Goog-FieldMask': 'id,displayName,primaryType,types,formattedAddress,location,viewport' },
   });
   if (!res.ok) return null;
-  return mapGoogle(await res.json(), null, null);
+  const j = await res.json();
+  const c = mapGoogle(j, null, null);
+  const v = (j as { viewport?: { low?: { latitude?: number; longitude?: number }; high?: { latitude?: number; longitude?: number } } }).viewport;
+  if (v && isNum(v.high?.latitude) && isNum(v.low?.latitude) && isNum(v.high?.longitude) && isNum(v.low?.longitude)) {
+    c.extent = { north: v.high.latitude, south: v.low.latitude, east: v.high.longitude, west: v.low.longitude };
+  }
+  // Cities, regions and addresses aren't venues: as one they'd become a pin
+  // at the city centre ("Manchester · 3"). Apple gives those no place id.
+  const types = (j as { types?: string[] }).types ?? [];
+  if (types.some((t) => GOOGLE_NON_VENUE.has(t))) c.category = null;
+  else if (!c.category && types.some((t) => t === 'establishment' || t === 'point_of_interest')) c.category = 'point_of_interest';
+  return c;
 }
+
+const GOOGLE_NON_VENUE = new Set([
+  'locality', 'sublocality', 'political', 'country', 'postal_code', 'neighborhood', 'route',
+  'street_address', 'premise', 'administrative_area_level_1', 'administrative_area_level_2',
+  'administrative_area_level_3', 'colloquial_area', 'geocode',
+]);
 
 function mapGoogle(p: Record<string, never>, fromLat: number | null, fromLon: number | null): Candidate {
   const loc = (p as { location?: { latitude?: number; longitude?: number } }).location ?? {};
@@ -305,6 +340,38 @@ function geohash(lat: number, lon: number, precision: number): string {
 
 const isNum = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 
+// ---- fine cells (Stage 3) --------------------------------------------------
+// A fixed ~300m grid: rows every FINE_STEP degrees of latitude; within a row,
+// columns are FINE_STEP / cos(row latitude) degrees wide so squares stay
+// ~300m east-west too. Same maths as lib/location.ts fineCell/decodeCell.
+const FINE_STEP = 0.0027;
+const FINE_RE = /^f300:(-?\d{1,6}):(-?\d{1,6})$/;
+
+function decodeFine(cell: string): { lat: number; lon: number } | null {
+  const m = FINE_RE.exec(cell);
+  if (!m) return null;
+  const lat = (Number(m[1]) + 0.5) * FINE_STEP;
+  const lonStep = FINE_STEP / Math.cos((lat * Math.PI) / 180);
+  return { lat, lon: (Number(m[2]) + 0.5) * lonStep };
+}
+
+/**
+ * Keep a post's fine cell only if it lies inside the venue: within the venue's
+ * stored area (padded by half a cell for edge squares), else within 250m of its
+ * point. Stops a photo taken at home and tagged "Heaton Park" from publishing
+ * the home's 300m square.
+ */
+function fineCellInsideVenue(cell: string, v: { lat: number | null; lon: number | null; extent?: Bounds | null }): boolean {
+  const c = decodeFine(cell);
+  if (!c) return false;
+  const e = v.extent;
+  if (e) {
+    const padLat = FINE_STEP / 2, padLon = FINE_STEP / 2 / Math.cos((c.lat * Math.PI) / 180);
+    return c.lat <= e.north + padLat && c.lat >= e.south - padLat && c.lon <= e.east + padLon && c.lon >= e.west - padLon;
+  }
+  return v.lat != null && v.lon != null && haversine(c.lat, c.lon, v.lat, v.lon) <= 250;
+}
+
 // ---- clients ---------------------------------------------------------------
 function serviceClient(): SupabaseClient {
   return createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
@@ -332,7 +399,7 @@ Deno.serve(withSentry('places', async (req) => {
 
   let body: {
     action?: string; lat?: number; lon?: number; query?: string; limit?: number; postId?: string;
-    provider?: string; provider_place_id?: string; category?: string;
+    provider?: string; provider_place_id?: string; category?: string; fine_cell?: string;
     north?: number; south?: number; east?: number; west?: number;
   };
   try { body = await req.json(); } catch { return json({ error: 'bad_request' }, 400); }
@@ -420,18 +487,26 @@ Deno.serve(withSentry('places', async (req) => {
         ? (APPLE_READY ? await appleDetails(provider_place_id) : null)
         : (GOOGLE_KEY ? await googleDetails(provider_place_id) : null);
       if (!details) return json({ error: 'place_not_found' }, 404);
+      // A venue is a place people go: no category means a city, area or
+      // address (see googleDetails), which must not become a pin.
+      if (!details.category) return json({ error: 'not_a_venue' }, 422);
       const cell = details.lat != null && details.lon != null ? 'gh5:' + geohash(details.lat, details.lon, GEOHASH_PRECISION) : null;
+      const ext = details.extent ?? null;
 
       const { data: venue, error: upErr } = await svc.from('venues').upsert({
         provider: details.provider, provider_place_id: details.provider_place_id,
         name: details.name, category: details.category, lat: details.lat, lon: details.lon,
         address: details.address, location_cell: cell, updated_at: new Date().toISOString(),
+        extent_north: ext?.north ?? null, extent_south: ext?.south ?? null,
+        extent_east: ext?.east ?? null, extent_west: ext?.west ?? null,
       }, { onConflict: 'provider,provider_place_id' }).select('id, name, category, address').single();
       if (upErr || !venue) return json({ error: 'venue_upsert_failed' }, 500);
 
-      const { error: setErr } = await svc.from('posts').update({ venue_id: venue.id }).eq('id', postId);
+      // Stage 3: the photo's ~300m square, only if it's inside this venue.
+      const fine = typeof body.fine_cell === 'string' && fineCellInsideVenue(body.fine_cell, details) ? body.fine_cell : null;
+      const { error: setErr } = await svc.from('posts').update({ venue_id: venue.id, location_fine: fine }).eq('id', postId);
       if (setErr) return json({ error: 'attach_failed' }, 500);
-      return json({ venue });
+      return json({ venue, fine_cell: fine });
     }
 
     return json({ error: 'unknown_action' }, 400);

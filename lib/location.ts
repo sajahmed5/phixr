@@ -60,11 +60,34 @@ export function coarseCell(lat: number, lon: number): string {
   return `gh${CELL_PRECISION}:` + geohashEncode(lat, lon, CELL_PRECISION);
 }
 
+/** ~300m grid (Stage 3): rows every FINE_STEP° of latitude; columns
+ *  FINE_STEP / cos(row latitude)° wide, so squares stay ~300m east-west.
+ *  Same maths as decodeFine in supabase/functions/places. */
+const FINE_STEP = 0.0027;
+
 /**
- * Decode a stored cell ('gh5:gcw2n') back to its centre, for placing cluster
- * pins on the Local map (#71). Inverse of geohashEncode; coarse by design.
+ * The photo's ~300m square ('f300:<row>:<col>'), sent with a venue tag so a big
+ * venue (a park) can show which part a photo was taken in. Never coordinates:
+ * only this rounded square leaves the phone, and the server keeps it only if it
+ * lies inside the tagged venue.
+ */
+export function fineCell(lat: number, lon: number): string {
+  const row = Math.floor(lat / FINE_STEP);
+  const lonStep = FINE_STEP / Math.cos(((row + 0.5) * FINE_STEP * Math.PI) / 180);
+  return `f300:${row}:${Math.floor(lon / lonStep)}`;
+}
+
+/**
+ * Decode a stored cell back to its centre, for placing pins on the Local map:
+ * a coarse geohash cell ('gh5:gcw2n', #71) or a fine cell ('f300:19828:-497').
  */
 export function decodeCell(cell: string): { lat: number; lon: number } | null {
+  const fine = /^f300:(-?\d{1,6}):(-?\d{1,6})$/.exec(cell);
+  if (fine) {
+    const lat = (Number(fine[1]) + 0.5) * FINE_STEP;
+    const lonStep = FINE_STEP / Math.cos((lat * Math.PI) / 180);
+    return { lat, lon: (Number(fine[2]) + 0.5) * lonStep };
+  }
   const hash = cell.includes(':') ? cell.split(':')[1] : cell;
   if (!hash) return null;
   let latLo = -90, latHi = 90, lonLo = -180, lonHi = 180;

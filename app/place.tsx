@@ -67,7 +67,10 @@ export default function PlacePage() {
             .eq('venue_id', venue);
           const v = data as { lat: number | null; lon: number | null; category: string | null } | null;
           if (live && v?.lat != null && v?.lon != null) {
-            setSpot({ lat: v.lat, lon: v.lon, exact: true, isBusiness: (count ?? 0) > 0, category: v.category });
+            // A part of a venue (Stage 3: venue + fine cell) — directions go to
+            // that part of the park, not the park's single point.
+            const part = cell ? decodeCell(cell) : null;
+            setSpot({ ...(part ?? { lat: v.lat, lon: v.lon }), exact: true, isBusiness: (count ?? 0) > 0, category: v.category });
           }
         } else if (cell) {
           const c = decodeCell(cell);
