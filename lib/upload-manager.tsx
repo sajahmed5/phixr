@@ -149,6 +149,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
         groupIds: c.draft.groupIds,
         attachLocation: c.draft.attachLocation,
         locationCell: c.draft.locationCell,
+        locationLabel: c.draft.locationLabel,
         tags: c.draft.tags,
         overlays: c.overlays,
       });

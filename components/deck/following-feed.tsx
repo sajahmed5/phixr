@@ -22,6 +22,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { CollectionPicker } from '@/components/collection-picker';
 import { CommentSheet } from '@/components/comments/comment-sheet';
 import { FollowingEmpty } from '@/components/deck/following-empty';
+import { HeartBurst } from '@/components/heart-burst';
 import { StoriesRail } from '@/components/deck/stories-rail';
 import { MentionText } from '@/components/mention-text';
 import { ShareSheet } from '@/components/share-sheet';
@@ -231,13 +232,16 @@ const FeedCard = memo(function FeedCard({
     });
   };
 
-  // Double-tapping the media likes (never unlikes), like Instagram.
+  // Double-tapping the media likes (never unlikes), like Instagram. The heart
+  // pops either way — the tap deserves visible feedback even when already liked (#68).
+  const [burst, setBurst] = useState(0);
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
     .maxDuration(260)
     .runOnJS(true)
     .onEnd(() => {
       if (!liked) toggle();
+      setBurst((n) => n + 1);
     });
 
   return (
@@ -302,6 +306,7 @@ const FeedCard = memo(function FeedCard({
           </View>
         </View>
       )}
+      <HeartBurst trigger={burst} />
       </View>
       </GestureDetector>
 
@@ -331,6 +336,15 @@ const FeedCard = memo(function FeedCard({
         <MentionText type="default" style={styles.caption} numberOfLines={5}>
           {card.caption}
         </MentionText>
+      ) : null}
+
+      {card.location_label ? (
+        <View style={styles.locationRow}>
+          <Ionicons name="location-outline" size={13} color={theme.textSecondary} />
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            {card.location_label}
+          </ThemedText>
+        </View>
       ) : null}
 
       {card.tags.length > 0 ? (
@@ -386,4 +400,5 @@ const styles = StyleSheet.create({
   caption: { paddingHorizontal: 14, paddingTop: 8 },
   caughtUp: { alignItems: 'center', gap: 6, paddingVertical: 28 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 14, paddingTop: 6 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingTop: 6 },
 });

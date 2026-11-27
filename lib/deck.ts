@@ -20,6 +20,8 @@ export type DeckCard = {
   tags: string[];
   /** Friends-feed heart likes (separate from deck like_count by design, brief 2A). */
   feed_like_count?: number;
+  /** Tagged place name, merged client-side by withLocationLabels (#65). */
+  location_label?: string | null;
   /** Whether the caller has hearted this post in the friends feed. */
   my_feed_like?: boolean;
   /** Total media items (1 = single). >1 means a carousel; set by resolveDeckMedia. */
@@ -113,6 +115,28 @@ export async function fetchDiscover(limit = 30): Promise<DeckCard[]> {
   return (data ?? []) as DeckCard[];
 }
 
+/**
+ * Attach posts.location_label to a batch of cards in one visible-ids select (#65).
+ * The deck RPCs predate the column; a client-side merge keeps their 300-line
+ * ranking bodies untouched. RLS applies, and a failure costs only the pins.
+ */
+async function withLocationLabels(cards: DeckCard[]): Promise<DeckCard[]> {
+  if (cards.length === 0) return cards;
+  try {
+    const { data } = await supabase
+      .from('posts')
+      .select('id, location_label')
+      .in('id', cards.map((c) => c.id))
+      .not('location_label', 'is', null);
+    const labels = new Map((data ?? []).map((r) => [r.id as string, r.location_label as string]));
+    return labels.size === 0
+      ? cards
+      : cards.map((c) => ({ ...c, location_label: labels.get(c.id) ?? null }));
+  } catch {
+    return cards;
+  }
+}
+
 /** Fetch a ranked batch, excluding posts already loaded into the client deck. */
 export async function fetchDeck(exclude: string[], limit = DECK_BATCH_SIZE): Promise<DeckCard[]> {
   const { data, error } = await supabase.rpc('get_deck', {
@@ -120,7 +144,7 @@ export async function fetchDeck(exclude: string[], limit = DECK_BATCH_SIZE): Pro
     _exclude: exclude,
   });
   if (error) throw error;
-  return (data ?? []) as DeckCard[];
+  return withLocationLabels((data ?? []) as DeckCard[]);
 }
 
 /**
@@ -137,7 +161,7 @@ export async function fetchFollowingDeck(
     _exclude: exclude,
   });
   if (error) throw error;
-  return (data ?? []) as DeckCard[];
+  return withLocationLabels((data ?? []) as DeckCard[]);
 }
 
 /**
@@ -154,7 +178,7 @@ export async function fetchFollowingFeed(
     _before: before,
   });
   if (error) throw error;
-  return (data ?? []) as DeckCard[];
+  return withLocationLabels((data ?? []) as DeckCard[]);
 }
 
 /** Counts that let the Following tab pick the right empty state. */
@@ -255,6 +279,19 @@ export type SwipedPost = {
  * The caller's own Liked ('right') or Skipped ('left') history, newest-first. Owner-only
  * (swipe anonymity). Thumbnails are signed here for display. Undo a choice with `undoSwipe`.
  */
+/** Totals for the Liked / Skipped tab badges (#66). RLS scopes the count to the caller. */
+export async function getMySwipeCounts(): Promise<{ liked: number; skipped: number }> {
+  const count = (direction: SwipeDirection) =>
+    supabase
+      .from('swipes')
+      .select('post_id', { count: 'exact', head: true })
+      .eq('direction', direction);
+  const [liked, skipped] = await Promise.all([count('right'), count('left')]);
+  if (liked.error) throw liked.error;
+  if (skipped.error) throw skipped.error;
+  return { liked: liked.count ?? 0, skipped: skipped.count ?? 0 };
+}
+
 export async function getMySwipes(
   direction: SwipeDirection,
   before: string | null = null,

@@ -342,7 +342,7 @@ export default function ConversationScreen() {
 
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
-      <Header title={title} subtitle={detail?.type === 'group' ? `${detail.members.length} members` : `@${other?.handle ?? ''}`} onBack={() => router.back()} onMenu={() => setMenu(true)} onPressTitle={() => router.push({ pathname: '/conversation/details', params: { cid } })} theme={theme} />
+      <Header title={title} subtitle={detail?.type === 'group' ? `${detail.members.length} members` : `@${other?.handle ?? ''}`} avatarUrl={detail?.type === 'group' ? detail.avatar_url : other?.avatar_url} onBack={() => router.back()} onMenu={() => setMenu(true)} onPressTitle={() => router.push({ pathname: '/conversation/details', params: { cid } })} theme={theme} />
 
       {/* #35/#37: explicit keyboard-height padding instead of KeyboardAvoidingView.
           KAV left its padding behind after dismissal ("it won't go lower"), and its
@@ -466,13 +466,24 @@ function isSeen(item: Message | Pending, detail: ConversationDetail | null, meId
   return !!other?.last_read_at && other.last_read_at >= item.created_at;
 }
 
-function Header({ title, subtitle, onBack, onMenu, onPressTitle, theme }: { title: string; subtitle?: string; onBack: () => void; onMenu: () => void; onPressTitle?: () => void; theme: ReturnType<typeof useTheme> }) {
+function Header({ title, subtitle, avatarUrl, onBack, onMenu, onPressTitle, theme }: { title: string; subtitle?: string; avatarUrl?: string | null; onBack: () => void; onMenu: () => void; onPressTitle?: () => void; theme: ReturnType<typeof useTheme> }) {
   return (
     <View style={[styles.header, { borderBottomColor: theme.border }]}>
       <Pressable onPress={onBack} hitSlop={10}><Ionicons name="chevron-back" size={26} color={theme.text} /></Pressable>
-      <Pressable style={{ flex: 1 }} onPress={onPressTitle} disabled={!onPressTitle} accessibilityRole="button" accessibilityLabel="Conversation details">
-        <ThemedText type="smallBold" numberOfLines={1}>{title}</ThemedText>
-        {subtitle ? <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{subtitle}</ThemedText> : null}
+      <Pressable style={styles.headerIdentity} onPress={onPressTitle} disabled={!onPressTitle} accessibilityRole="button" accessibilityLabel="Conversation details">
+        {title ? (
+          avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.headerAvatar} contentFit="cover" />
+          ) : (
+            <View style={[styles.headerAvatar, { backgroundColor: theme.border, alignItems: 'center', justifyContent: 'center' }]}>
+              <ThemedText type="smallBold">{title.slice(0, 1).toUpperCase()}</ThemedText>
+            </View>
+          )
+        ) : null}
+        <View style={{ flex: 1 }}>
+          <ThemedText type="smallBold" numberOfLines={1}>{title}</ThemedText>
+          {subtitle ? <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{subtitle}</ThemedText> : null}
+        </View>
       </Pressable>
       <Pressable onPress={onMenu} hitSlop={10} accessibilityLabel="Conversation options"><Ionicons name="ellipsis-horizontal" size={22} color={theme.text} /></Pressable>
     </View>
@@ -692,6 +703,8 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth },
+  headerIdentity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerAvatar: { width: 32, height: 32, borderRadius: 16 },
   bubbleRow: { flexDirection: 'row', marginVertical: 3 },
   bubble: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
   replyQuote: { borderLeftWidth: 2, paddingLeft: 6, marginBottom: 2 },

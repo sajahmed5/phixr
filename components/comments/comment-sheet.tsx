@@ -239,7 +239,9 @@ export function CommentSheet({
           <View style={styles.header}>
             <View style={[styles.grabber, { backgroundColor: theme.border }]} />
             <View style={styles.headerRow}>
-              <ThemedText type="subtitle">Comments</ThemedText>
+              <ThemedText type="subtitle" numberOfLines={1} style={{ flexShrink: 1 }}>
+                Comments
+              </ThemedText>
               <Pressable onPress={dismiss} hitSlop={10} accessibilityLabel="Close">
                 <Ionicons name="close" size={24} color={theme.text} />
               </Pressable>

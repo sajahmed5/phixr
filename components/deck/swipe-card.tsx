@@ -207,6 +207,15 @@ export const SwipeCard = memo(function SwipeCard({
           </ThemedText>
         ) : null}
 
+        {card.location_label ? (
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={13} color="#fff" />
+            <ThemedText type="small" style={styles.onMediaDim} numberOfLines={1}>
+              {card.location_label}
+            </ThemedText>
+          </View>
+        ) : null}
+
         {card.tags.length > 0 ? (
           <View style={styles.tagRow} pointerEvents="box-none">
             {card.tags.map((t) => (
@@ -334,5 +343,6 @@ const styles = StyleSheet.create({
   onMedia: { color: '#fff', ...textShadow },
   onMediaDim: { color: 'rgba(255,255,255,0.85)' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 10, rowGap: 4 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   tag: { color: '#FF9D2E', ...textShadow },
 });

@@ -17,6 +17,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { CollectionPicker } from '@/components/collection-picker';
 import { ShareSheet } from '@/components/share-sheet';
 import { CommentSheet } from '@/components/comments/comment-sheet';
+import { HeartBurst } from '@/components/heart-burst';
 import { MentionText } from '@/components/mention-text';
 import { PostAnalyticsCard } from '@/components/profile/post-analytics-card';
 import { SensitiveCover } from '@/components/sensitive-cover';
@@ -58,18 +59,25 @@ import {
   type PostDetail,
   type PostMediaItem,
 } from '@/lib/posts';
+import { getProfilePosts } from '@/lib/profile';
 import { downloadOwnPostMedia } from '@/lib/share';
 
 /** How many comments to show inline before "View all". Two fits without pushing the
  *  rest of the post off-screen. */
 const COMMENT_PREVIEW = 2;
 
+/** Instagram's display bounds: 4:5 at the tallest, 1.91:1 at the widest (#62). */
+const clampAspect = (w: number, h: number) =>
+  w > 0 && h > 0 ? Math.min(1.91, Math.max(4 / 5, w / h)) : 4 / 5;
+
 export default function PostViewScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user, profile } = useAuth();
   const isBusiness = isBusinessProfile(profile);
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `nav` is set only by goToSibling: 'back' makes the replace animate as a pop, so
+  // swiping to the previous post slides the way the finger moved (#39).
+  const { id, nav } = useLocalSearchParams<{ id: string; nav?: string }>();
   const { width: winW } = useWindowDimensions();
   const pageW = winW - 32; // styles.content horizontal padding
   const [post, setPost] = useState<PostDetail | null>(null);
@@ -79,6 +87,11 @@ export default function PostViewScreen() {
   const [extras, setExtras] = useState<PostMediaItem[]>([]);
   const [preview, setPreview] = useState<CommentView[]>([]);
   const [page, setPage] = useState(0);
+  // #62: images render at their natural shape (clamped) instead of a forced 4:5
+  // cover-crop, which was cutting subjects out of the full view that the grid
+  // thumbnail still showed. A carousel takes its cover's ratio for every page so
+  // the pager keeps one height. Null until the (cached) source reports its size.
+  const [aspect, setAspect] = useState<number | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
@@ -100,6 +113,7 @@ export default function PostViewScreen() {
   const [siblings, setSiblings] = useState<string[]>([]);
 
   const isOwner = !!post && post.user_id === user?.id;
+  const posterId = post?.user_id ?? null;
   useEffect(() => {
     if (post?.media_type === 'video') {
       void getVideoCaptions(post.id)
@@ -112,15 +126,19 @@ export default function PostViewScreen() {
     setPinned(!!(post as unknown as { pinned_at?: string | null })?.pinned_at);
   }, [post]);
   useEffect(() => {
-    if (!isOwner) return;
+    // #63: on someone else's post their visible grid becomes the browse set — the
+    // same fetch the profile screen uses, so RLS has already filtered out anything
+    // this viewer isn't allowed to see.
+    if (!posterId) return;
     let alive = true;
-    void getMyPosts()
-      .then((rows) => alive && setSiblings(rows.map((r) => r.id)))
-      .catch(() => {});
+    const ids = isOwner
+      ? getMyPosts().then((rows) => rows.map((r) => r.id))
+      : getProfilePosts(posterId).then((rows) => rows.map((r) => r.id));
+    void ids.then((list) => alive && setSiblings(list)).catch(() => {});
     return () => {
       alive = false;
     };
-  }, [isOwner]);
+  }, [isOwner, posterId]);
 
   const siblingIndex = id ? siblings.indexOf(id) : -1;
   const goToSibling = useCallback(
@@ -128,27 +146,20 @@ export default function PostViewScreen() {
       const next = siblings[siblingIndex + delta];
       // replace(), not push() — stepping through 20 posts shouldn't build a 20-deep
       // back stack that the user then has to unwind.
-      if (next) router.replace({ pathname: '/post/[id]', params: { id: next } });
+      if (next)
+        router.replace({
+          pathname: '/post/[id]',
+          params: { id: next, nav: delta < 0 ? 'back' : 'fwd' },
+        });
     },
     [siblings, siblingIndex, router],
   );
 
-  // #26: swipe right-to-left → next of your own posts. JS-thread pan (house rule);
+  // #26: swipe right-to-left → next post. JS-thread pan (house rule);
   // horizontal-only activation so the vertical scroll and the carousel keep working.
+  // (The gesture itself is built below, after setDirection exists — #64 made a
+  // rightward fling on someone else's post a like.)
   const canBrowse = siblings.length > 1 && siblingIndex >= 0;
-  const browsePan = useMemo(
-    () =>
-      Gesture.Pan()
-        .runOnJS(true)
-        .activeOffsetX([-24, 24])
-        .failOffsetY([-12, 12])
-        .onEnd((e) => {
-          if (!canBrowse) return;
-          if (e.translationX < -60) goToSibling(1);
-          else if (e.translationX > 60) goToSibling(-1);
-        }),
-    [canBrowse, goToSibling],
-  );
 
   // Carousel wins until its end: the inner pager owns horizontal drags over the media,
   // but overscrolling past the last page (or before the first) hands off to the next /
@@ -230,6 +241,51 @@ export default function PostViewScreen() {
     [id, myDir],
   );
 
+  // #68: the brief heart pop; fires on double-tap and on a like-fling.
+  const [burst, setBurst] = useState(0);
+  const likeWithBurst = useCallback(() => {
+    if (myDir !== 'right') void setDirection('right');
+    setBurst((n) => n + 1);
+  }, [myDir, setDirection]);
+
+  // #26/#64: one pan for both worlds. Leftward fling → next post. Rightward fling:
+  // your own post pages back; on someone else's it pages back only when the swipe
+  // STARTS in the left third of the screen — from mid-screen outward it is a like,
+  // mirroring the deck. Double-tap likes too (never unlikes), Instagram-style.
+  const browsePan = useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .activeOffsetX([-24, 24])
+        .failOffsetY([-12, 12])
+        .onEnd((e) => {
+          // Where the finger went DOWN, recovered from the end event so no ref
+          // is read inside this render-time memo.
+          const startX = e.x - e.translationX;
+          if (e.translationX < -60) {
+            if (canBrowse) goToSibling(1);
+          } else if (e.translationX > 60) {
+            if (isOwner || startX < pageW * 0.35) {
+              if (canBrowse) goToSibling(-1);
+            } else {
+              likeWithBurst();
+            }
+          }
+        }),
+    [canBrowse, goToSibling, isOwner, pageW, likeWithBurst],
+  );
+  const doubleTap = useMemo(
+    () =>
+      Gesture.Tap()
+        .numberOfTaps(2)
+        .maxDuration(260)
+        .runOnJS(true)
+        .onEnd(() => {
+          if (!isOwner) likeWithBurst();
+        }),
+    [isOwner, likeWithBurst],
+  );
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mount data-loader; sets loading/error state internally
     void load();
@@ -269,17 +325,21 @@ export default function PostViewScreen() {
       .catch(() => Alert.alert("Couldn't report", 'Please try again in a moment.'));
   };
 
+  // The replace animation is chosen when the incoming screen first mounts (its loading
+  // state), so every Stack.Screen in this file must carry it, not just the ready one.
+  const animationTypeForReplace: 'push' | 'pop' = nav === 'back' ? 'pop' : 'push';
+
   if (status === 'loading')
     return (
       <ThemedView style={styles.center}>
-        <Stack.Screen options={{ headerShown: true, title: 'Post' }} />
+        <Stack.Screen options={{ headerShown: true, title: 'Post', animationTypeForReplace }} />
         <ActivityIndicator color={theme.textSecondary} />
       </ThemedView>
     );
   if (status !== 'ready' || !post) {
     return (
       <ThemedView style={styles.center}>
-        <Stack.Screen options={{ headerShown: true, title: 'Post' }} />
+        <Stack.Screen options={{ headerShown: true, title: 'Post', animationTypeForReplace }} />
         <ThemedText type="small" themeColor="textSecondary">
           {status === 'missing' ? 'This post isn’t available.' : 'Couldn’t load this post.'}
         </ThemedText>
@@ -297,6 +357,7 @@ export default function PostViewScreen() {
       <Stack.Screen
         options={{
           headerShown: true,
+          animationTypeForReplace,
           // A plain `title` string isn't tappable, so "@handle" looked like a dead link
           // to anyone trying to reach the author's profile from a post (#7).
           headerTitle: () => (
@@ -336,6 +397,7 @@ export default function PostViewScreen() {
       />
       <GestureDetector gesture={browsePan}>
         <ScrollView contentContainerStyle={styles.content}>
+          <GestureDetector gesture={doubleTap}>
           <View>
             {post.sensitive && !revealed ? (
               <SensitiveCover onReveal={() => setRevealed(true)} />
@@ -344,7 +406,12 @@ export default function PostViewScreen() {
               post.media_type === 'video' ? (
                 <PostVideo uri={post.media_url} overlays={post.overlays} />
               ) : (
-                <Image source={{ uri: post.media_url }} style={styles.media} contentFit="cover" />
+                <Image
+                  source={{ uri: post.media_url }}
+                  style={[styles.media, aspect ? { aspectRatio: aspect } : null]}
+                  contentFit="cover"
+                  onLoad={(e) => setAspect(clampAspect(e.source.width, e.source.height))}
+                />
               )
             ) : (
               // Carousel: cover + extras in a horizontal pager with dots + counter.
@@ -366,8 +433,13 @@ export default function PostViewScreen() {
                         ) : (
                           <Image
                             source={{ uri: m.media_url }}
-                            style={styles.media}
+                            style={[styles.media, aspect ? { aspectRatio: aspect } : null]}
                             contentFit="cover"
+                            onLoad={
+                              i === 0
+                                ? (e) => setAspect(clampAspect(e.source.width, e.source.height))
+                                : undefined
+                            }
                           />
                         )}
                       </View>
@@ -392,7 +464,9 @@ export default function PostViewScreen() {
                 </View>
               </View>
             )}
+            <HeartBurst trigger={burst} />
           </View>
+          </GestureDetector>
 
           {/* Tap the heart to like/unlike, the cross to skip/un-skip. */}
           <View style={styles.stats}>
@@ -520,6 +594,16 @@ export default function PostViewScreen() {
             </MentionText>
           ) : null}
 
+          {/* #61: the tagged place, finally visible. */}
+          {post.location_label ? (
+            <View style={styles.locationRow}>
+              <Ionicons name="location-outline" size={14} color={theme.textSecondary} />
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                {post.location_label}
+              </ThemedText>
+            </View>
+          ) : null}
+
           {post.tags.length > 0 ? (
             <View style={styles.tagRow}>
               {post.tags.map((t) => (
@@ -585,7 +669,8 @@ export default function PostViewScreen() {
             accessibilityRole="button"
             style={[styles.commentsBtn, { borderColor: theme.border }]}>
             <Ionicons name="chatbubble-outline" size={18} color={theme.text} />
-            <ThemedText type="smallBold">
+            {/* numberOfLines: the row once wrapped mid-word on narrow screens (#41). */}
+            <ThemedText type="smallBold" numberOfLines={1} style={{ flexShrink: 1 }}>
               {commentCount > 0
                 ? `View ${commentCount} comment${commentCount === 1 ? '' : 's'}`
                 : 'Add a comment'}
@@ -594,7 +679,7 @@ export default function PostViewScreen() {
 
           {/* Swipe left/right anywhere on the post to move between your own posts (#26);
             the counter is the only chrome left now the buttons are gone. */}
-          {isOwnPost && siblings.length > 1 ? (
+          {canBrowse ? (
             <ThemedText
               type="small"
               themeColor="textSecondary"
@@ -834,6 +919,7 @@ const styles = StyleSheet.create({
   stats: { flexDirection: 'row', gap: 20 },
   stat: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   caption: {},
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: -8 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tag: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   previewWrap: { gap: 6, marginTop: 12 },
