@@ -13,7 +13,10 @@
 //       UNKNOWN=0 VERY_UNLIKELY=1 UNLIKELY=2 POSSIBLE=3 LIKELY=4 VERY_LIKELY=5)
 //     MODERATION_ADULT_REJECT_AT      default 5  (>= → reject outright)
 //     MODERATION_ADULT_FLAG_AT        default 4  (>= → moderation_status flagged)
-//     MODERATION_RACY_FLAG_AT         default 5  (racy alone only flags at 5)
+//     MODERATION_RACY_FLAG_AT         default 5  (racy alone flags at 5, and only
+//                                                 when a person is in the photo)
+//     MODERATION_PERSON_LABEL_MIN     default 0.5 (label confidence that counts as
+//                                                 "a person is in the photo")
 //     MODERATION_VIOLENCE_REJECT_AT   default 5
 //   Limits:
 //     MEDIA_MAX_IMAGE_BYTES           default 15728640  (15 MB)
@@ -55,6 +58,18 @@ export const config = {
     adultFlagAt: num('MODERATION_ADULT_FLAG_AT', 4),
     racyFlagAt: num('MODERATION_RACY_FLAG_AT', 5),
     violenceRejectAt: num('MODERATION_VIOLENCE_REJECT_AT', 5),
+    personLabelMinConfidence: num('MODERATION_PERSON_LABEL_MIN', 0.5),
+    // Vision labels that mean a person (or part of one) is in the photo. Any
+    // label containing "human" also counts. Used only to gate the racy hold.
+    personLabels: new Set([
+      'person', 'people', 'man', 'woman', 'girl', 'boy', 'child', 'baby', 'face',
+      'skin', 'selfie', 'model', 'fashion', 'beauty', 'flesh', 'muscle', 'tattoo',
+      'chest', 'abdomen', 'navel', 'thigh', 'leg', 'knee', 'arm', 'shoulder', 'waist',
+      'back', 'buttocks', 'trunk (body)', 'lip', 'neck', 'hair', 'eyelash', 'cheek',
+      'swimwear', 'swimsuit', 'bikini', 'lingerie', 'undergarment', 'brassiere',
+      'briefs', 'underpants', 'boxer shorts', 'tights', 'stomach', 'photo shoot',
+      'gesture', 'finger', 'hand', 'foot', 'barechested', 'active undergarment',
+    ]),
   },
 
   limits: {

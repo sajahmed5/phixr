@@ -27,12 +27,29 @@ export type VisionResult = {
   landmarks: LabelSuggestion[];
 };
 
-function decide(scores: { adult: number; racy: number; violence: number }): { decision: 'reject' | 'flag' | 'approve'; reason: string | null } {
+export function decide(
+  scores: { adult: number; racy: number; violence: number },
+  hasPerson: boolean,
+): { decision: 'reject' | 'flag' | 'approve'; reason: string | null } {
   const m = config.moderation;
   if (scores.adult >= m.adultRejectAt) return { decision: 'reject', reason: 'Adult content above the allowed threshold.' };
   if (scores.violence >= m.violenceRejectAt) return { decision: 'reject', reason: 'Graphic/violent content above the allowed threshold.' };
-  if (scores.adult >= m.adultFlagAt || scores.racy >= m.racyFlagAt) return { decision: 'flag', reason: null };
+  if (scores.adult >= m.adultFlagAt) return { decision: 'flag', reason: null };
+  // "Racy" alone misfires on animals and scenery (a white dog by a lake scored
+  // VERY_LIKELY). It only holds a post when Vision also sees a person —
+  // decided with Saj 2026-11-27. The adult (nudity) score is unaffected.
+  if (scores.racy >= m.racyFlagAt && hasPerson) return { decision: 'flag', reason: null };
   return { decision: 'approve', reason: null };
+}
+
+/** Does Vision see a person or human body part? (raw labels, before filtering) */
+export function seesPerson(raw: { description?: string; score?: number }[]): boolean {
+  const m = config.moderation;
+  return raw.some((l) => {
+    const name = (l.description ?? '').trim().toLowerCase();
+    if ((l.score ?? 0) < m.personLabelMinConfidence || !name) return false;
+    return m.personLabels.has(name) || name.includes('human');
+  });
 }
 
 function normaliseLabels(raw: { description?: string; score?: number }[]): LabelSuggestion[] {
@@ -101,7 +118,13 @@ export async function scanAndLabel(displayJpeg: Uint8Array): Promise<VisionResul
     racy: LIKELIHOOD[ss.racy] ?? 0,
     violence: LIKELIHOOD[ss.violence] ?? 0,
   };
-  const { decision, reason } = decide(scores);
+  const hasPerson = seesPerson(r.labelAnnotations ?? []);
+  const { decision, reason } = decide(scores, hasPerson);
+  // Server log only (never returned to the client, so thresholds can't be
+  // probed): lets moderators see WHY something was held or refused.
+  if (decision !== 'approve' || scores.racy >= config.moderation.racyFlagAt) {
+    console.log(`[media-pipeline] safesearch ${decision}: adult=${scores.adult} racy=${scores.racy} violence=${scores.violence} medical=${LIKELIHOOD[ss.medical] ?? 0} spoof=${LIKELIHOOD[ss.spoof] ?? 0} person=${hasPerson}`);
+  }
   const labels = normaliseLabels(r.labelAnnotations ?? []);
   const landmarks = normaliseLandmarks(r.landmarkAnnotations ?? []);
   return { provider: 'google', decision, reason, scores, labels, landmarks };
