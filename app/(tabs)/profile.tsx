@@ -23,7 +23,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { isBusinessProfile } from '@/lib/account-type';
 import { useAuth } from '@/lib/auth-context';
 import { getBookmarks, getCollections, type Collection, type SavedPost } from '@/lib/bookmarks';
-import { getMySwipes, undoSwipe, type SwipedPost } from '@/lib/deck';
+import { getMySwipeCounts, getMySwipes, undoSwipe, type SwipedPost } from '@/lib/deck';
 import {
   getPendingRequestCount,
   getProfileOverview,
@@ -35,7 +35,8 @@ import { useOutbox } from '@/lib/outbox-provider';
 import { shareProfile } from '@/lib/share';
 
 type Tab = 'posts' | 'liked' | 'skipped' | 'saved';
-type Cell = { id: string; thumbnail_url: string; media_type: 'image' | 'video'; media_count?: number };
+type Cell = { id: string; thumbnail_url: string; media_type: 'image' | 'video'; media_count?: number; visibility?: string };
+type VisFilter = 'all' | 'public' | 'private';
 
 export default function ProfileScreen() {
   const theme = useTheme();
@@ -54,7 +55,11 @@ export default function ProfileScreen() {
   const [saved, setSaved] = useState<SavedPost[] | null>(null);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [savedFilter, setSavedFilter] = useState<string | null>(null); // null = All saved
+  // #67: All / Public / Private chips on the Posts tab. 'private' means "not public",
+  // so audience-group posts count as private here too.
+  const [visFilter, setVisFilter] = useState<VisFilter>('all');
   const [requestCount, setRequestCount] = useState(0);
+  const [swipeCounts, setSwipeCounts] = useState<{ liked: number; skipped: number } | null>(null);
   const [headError, setHeadError] = useState(false);
 
   const load = useCallback(async () => {
@@ -70,6 +75,8 @@ export default function ProfileScreen() {
       setHeadError(true);
     }
     setRequestCount(await getPendingRequestCount());
+    // #66: totals on the Liked / Skipped tab icons.
+    setSwipeCounts(await getMySwipeCounts().catch(() => null));
   }, [handle]);
 
   const loadSwipes = useCallback(async (t: 'liked' | 'skipped') => {
@@ -138,9 +145,12 @@ export default function ProfileScreen() {
       params: { userId: overview.id, type, title: overview.handle },
     });
 
+  const isPrivatePost = (visibility: string) => visibility !== 'public';
   const cells: Cell[] =
     tab === 'posts'
-      ? (posts ?? []).map((p) => ({ id: p.id, thumbnail_url: p.thumbnail_url, media_type: p.media_type, media_count: p.media_count }))
+      ? (posts ?? [])
+          .filter((p) => visFilter === 'all' || isPrivatePost(p.visibility) === (visFilter === 'private'))
+          .map((p) => ({ id: p.id, thumbnail_url: p.thumbnail_url, media_type: p.media_type, media_count: p.media_count, visibility: p.visibility }))
       : tab === 'saved'
         ? (saved ?? []).map((s) => ({ id: s.id, thumbnail_url: s.thumbnail_url, media_type: s.media_type }))
         : (tab === 'liked' ? liked ?? [] : skipped ?? []).map((s) => ({
@@ -152,7 +162,11 @@ export default function ProfileScreen() {
     tab === 'posts' ? posts === null : tab === 'liked' ? liked === null : tab === 'skipped' ? skipped === null : saved === null;
   const emptyText =
     tab === 'posts'
-      ? "You haven't posted yet."
+      ? visFilter === 'all' || (posts ?? []).length === 0
+        ? "You haven't posted yet."
+        : visFilter === 'private'
+          ? 'No private posts.'
+          : 'No public posts.'
       : tab === 'liked'
         ? "You haven't liked anything yet."
         : tab === 'skipped'
@@ -235,10 +249,29 @@ export default function ProfileScreen() {
       <QueuedPostsStrip onPress={() => router.push('/drafts')} />
       <View style={[styles.tabs, { borderTopColor: theme.border, borderBottomColor: theme.border }]}>
         <TabButton icon="grid-outline" active={tab === 'posts'} onPress={() => setTab('posts')} label="Posts" />
-        <TabButton icon="heart-outline" active={tab === 'liked'} onPress={() => setTab('liked')} label="Liked" />
-        <TabButton icon="close-circle-outline" active={tab === 'skipped'} onPress={() => setTab('skipped')} label="Skipped" />
+        <TabButton icon="heart-outline" active={tab === 'liked'} onPress={() => setTab('liked')} label="Liked" count={swipeCounts?.liked} />
+        <TabButton icon="close-circle-outline" active={tab === 'skipped'} onPress={() => setTab('skipped')} label="Skipped" count={swipeCounts?.skipped} />
         <TabButton icon="bookmark-outline" active={tab === 'saved'} onPress={() => setTab('saved')} label="Saved" />
       </View>
+      {tab === 'posts' && (posts ?? []).length > 0 ? (
+        <View style={styles.chips}>
+          {(
+            [
+              ['all', 'All', (posts ?? []).length],
+              ['public', 'Public', (posts ?? []).filter((p) => !isPrivatePost(p.visibility)).length],
+              ['private', 'Private', (posts ?? []).filter((p) => isPrivatePost(p.visibility)).length],
+            ] as const
+          ).map(([key, label, n]) => (
+            <Chip
+              key={key}
+              label={`${label} ${n}`}
+              active={visFilter === key}
+              onPress={() => setVisFilter(key)}
+              theme={theme}
+            />
+          ))}
+        </View>
+      ) : null}
       {tab === 'saved' ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           <Chip label="All" active={savedFilter === null} onPress={() => setSavedFilter(null)} theme={theme} />
@@ -294,6 +327,12 @@ export default function ProfileScreen() {
                 <Ionicons name="copy" size={12} color="#fff" />
               </View>
             ) : null}
+            {/* #67: private posts always carry the lock, in every view. */}
+            {item.visibility && isPrivatePost(item.visibility) ? (
+              <View style={[styles.badge, styles.lockBadge]}>
+                <Ionicons name="lock-closed" size={12} color="#fff" />
+              </View>
+            ) : null}
             {tab === 'liked' || tab === 'skipped' ? (
               <Pressable
                 onPress={() => undo(item.id)}
@@ -317,11 +356,13 @@ function TabButton({
   active,
   onPress,
   label,
+  count,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   active: boolean;
   onPress: () => void;
   label: string;
+  count?: number;
 }) {
   const theme = useTheme();
   return (
@@ -329,9 +370,16 @@ function TabButton({
       onPress={onPress}
       style={styles.tab}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={count !== undefined ? `${label}, ${count}` : label}
       accessibilityState={{ selected: active }}>
-      <Ionicons name={icon} size={22} color={active ? BRAND.accent : theme.textSecondary} />
+      <View style={styles.tabIconRow}>
+        <Ionicons name={icon} size={22} color={active ? BRAND.accent : theme.textSecondary} />
+        {count !== undefined ? (
+          <ThemedText type="small" themeColor={active ? undefined : 'textSecondary'} style={active ? { color: BRAND.accent } : undefined}>
+            {count > 999 ? '999+' : count}
+          </ThemedText>
+        ) : null}
+      </View>
       <View style={[styles.tabUnderline, { backgroundColor: active ? BRAND.accent : 'transparent' }]} />
     </Pressable>
   );
@@ -491,10 +539,12 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
   chip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1 },
   tab: { flex: 1, alignItems: 'center', paddingTop: 12, gap: 10 },
+  tabIconRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   tabUnderline: { height: 2, width: '55%', borderRadius: 1 },
   emptyBox: { paddingVertical: 48, alignItems: 'center' },
   thumb: { width: '100%', height: '100%', backgroundColor: '#111' },
   badge: { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999, padding: 4 },
   vidBadge: { top: 4, left: 4 },
   undo: { top: 4, right: 4 },
+  lockBadge: { top: 4, right: 4 },
 });

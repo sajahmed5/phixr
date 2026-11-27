@@ -179,6 +179,9 @@ export type CreatePostInput = {
   /** Coarse cell chosen client-side (device GPS / picked venue). Falls back to the
    *  pipeline's EXIF-derived cell when null. */
   locationCell?: string | null;
+  /** Display name of the picked place ("Camden Market"); shown on the post (#61/#65).
+   *  Stored only when attachLocation is on, like the cell. */
+  locationLabel?: string | null;
   // Tags the user confirmed, split by provenance. Names are raw; resolved here.
   tags: { name: string; source: 'user' | 'vision' | 'geo' }[];
   /** Video overlays (normalised); stored as jsonb and drawn at playback. */
@@ -217,6 +220,7 @@ export async function createPost(input: CreatePostInput): Promise<string> {
       location_cell: input.attachLocation
         ? (input.locationCell ?? result.suggestions.location_cell ?? null)
         : null,
+      location_label: input.attachLocation ? (input.locationLabel?.trim() || null) : null,
       overlays: input.overlays ?? [],
     })
     .select('id')

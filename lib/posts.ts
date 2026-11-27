@@ -95,6 +95,8 @@ export type PostDetail = {
   my_direction: 'left' | 'right' | null;
   /** Video text/sticker overlays (raw jsonb); parse with parseVideoOverlays. */
   overlays: unknown;
+  /** Display name of the tagged place, if the poster attached one (#61). */
+  location_label: string | null;
 };
 
 /** Load a single post for the read-only viewer, with counts + tags. RLS hides ones you can't see. */
@@ -102,7 +104,7 @@ export async function getPostDetail(id: string): Promise<PostDetail | null> {
   const { data, error } = await supabase
     .from('posts')
     .select(
-      'id, media_url, media_type, caption, visibility, sensitive, like_count, skip_count, comment_count, user_id, overlays, profiles!posts_user_id_fkey(handle, display_name), post_tags(tags(name))',
+      'id, media_url, media_type, caption, visibility, sensitive, like_count, skip_count, comment_count, user_id, overlays, location_label, profiles!posts_user_id_fkey(handle, display_name), post_tags(tags(name))',
     )
     .eq('id', id)
     .maybeSingle();
@@ -160,6 +162,7 @@ export async function getPostDetail(id: string): Promise<PostDetail | null> {
     user_id: row.user_id,
     my_direction: myDirection,
     overlays: (row as Record<string, unknown>).overlays ?? [],
+    location_label: ((row as Record<string, unknown>).location_label as string | null) ?? null,
   };
 }
 
