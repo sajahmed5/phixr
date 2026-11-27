@@ -23,14 +23,33 @@ export type VisionResult = {
   reason: string | null; // populated when decision === 'reject'
   scores: { adult: number; racy: number; violence: number } | null;
   labels: LabelSuggestion[];
+  /** Named places recognised from the pixels (e.g. "teotihuacan"), best first. */
+  landmarks: LabelSuggestion[];
 };
 
-function decide(scores: { adult: number; racy: number; violence: number }): { decision: 'reject' | 'flag' | 'approve'; reason: string | null } {
+export function decide(
+  scores: { adult: number; racy: number; violence: number },
+  hasPerson: boolean,
+): { decision: 'reject' | 'flag' | 'approve'; reason: string | null } {
   const m = config.moderation;
   if (scores.adult >= m.adultRejectAt) return { decision: 'reject', reason: 'Adult content above the allowed threshold.' };
   if (scores.violence >= m.violenceRejectAt) return { decision: 'reject', reason: 'Graphic/violent content above the allowed threshold.' };
-  if (scores.adult >= m.adultFlagAt || scores.racy >= m.racyFlagAt) return { decision: 'flag', reason: null };
+  if (scores.adult >= m.adultFlagAt) return { decision: 'flag', reason: null };
+  // "Racy" alone misfires on animals and scenery (a white dog by a lake scored
+  // VERY_LIKELY). It only holds a post when Vision also sees a person —
+  // decided with Saj 2026-11-27. The adult (nudity) score is unaffected.
+  if (scores.racy >= m.racyFlagAt && hasPerson) return { decision: 'flag', reason: null };
   return { decision: 'approve', reason: null };
+}
+
+/** Does Vision see a person or human body part? (raw labels, before filtering) */
+export function seesPerson(raw: { description?: string; score?: number }[]): boolean {
+  const m = config.moderation;
+  return raw.some((l) => {
+    const name = (l.description ?? '').trim().toLowerCase();
+    if ((l.score ?? 0) < m.personLabelMinConfidence || !name) return false;
+    return m.personLabels.has(name) || name.includes('human');
+  });
 }
 
 function normaliseLabels(raw: { description?: string; score?: number }[]): LabelSuggestion[] {
@@ -49,11 +68,26 @@ function normaliseLabels(raw: { description?: string; score?: number }[]): Label
   return out;
 }
 
+function normaliseLandmarks(raw: { description?: string; score?: number }[]): LabelSuggestion[] {
+  const t = config.tagging;
+  const seen = new Set<string>();
+  const out: LabelSuggestion[] = [];
+  for (const l of raw) {
+    const name = (l.description ?? '').trim().toLowerCase();
+    const confidence = l.score ?? 0;
+    if (!name || confidence < t.landmarkMinConfidence || seen.has(name)) continue;
+    seen.add(name);
+    out.push({ name, confidence });
+    if (out.length >= t.landmarkMaxResults) break;
+  }
+  return out;
+}
+
 /** Scan the (already stripped) display image and gather label suggestions. */
 export async function scanAndLabel(displayJpeg: Uint8Array): Promise<VisionResult> {
   if (config.visionProvider === 'none' || !config.googleVisionApiKey) {
     // No provider → cannot certify safety → caller must flag for review.
-    return { provider: 'none', decision: 'flag', reason: null, scores: null, labels: [] };
+    return { provider: 'none', decision: 'flag', reason: null, scores: null, labels: [], landmarks: [] };
   }
 
   const b64 = base64Encode(displayJpeg);
@@ -64,6 +98,9 @@ export async function scanAndLabel(displayJpeg: Uint8Array): Promise<VisionResul
       features: [
         { type: 'SAFE_SEARCH_DETECTION' },
         { type: 'LABEL_DETECTION', maxResults: 25 },
+        ...(config.tagging.landmarksEnabled
+          ? [{ type: 'LANDMARK_DETECTION', maxResults: config.tagging.landmarkMaxResults }]
+          : []),
       ],
     }],
   };
@@ -71,7 +108,7 @@ export async function scanAndLabel(displayJpeg: Uint8Array): Promise<VisionResul
   const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) {
     // A failed scan must not silently approve. Surface as flag so a human reviews.
-    return { provider: 'google', decision: 'flag', reason: null, scores: null, labels: [] };
+    return { provider: 'google', decision: 'flag', reason: null, scores: null, labels: [], landmarks: [] };
   }
   const json = await res.json();
   const r = json?.responses?.[0] ?? {};
@@ -81,9 +118,16 @@ export async function scanAndLabel(displayJpeg: Uint8Array): Promise<VisionResul
     racy: LIKELIHOOD[ss.racy] ?? 0,
     violence: LIKELIHOOD[ss.violence] ?? 0,
   };
-  const { decision, reason } = decide(scores);
+  const hasPerson = seesPerson(r.labelAnnotations ?? []);
+  const { decision, reason } = decide(scores, hasPerson);
+  // Server log only (never returned to the client, so thresholds can't be
+  // probed): lets moderators see WHY something was held or refused.
+  if (decision !== 'approve' || scores.racy >= config.moderation.racyFlagAt) {
+    console.log(`[media-pipeline] safesearch ${decision}: adult=${scores.adult} racy=${scores.racy} violence=${scores.violence} medical=${LIKELIHOOD[ss.medical] ?? 0} spoof=${LIKELIHOOD[ss.spoof] ?? 0} person=${hasPerson}`);
+  }
   const labels = normaliseLabels(r.labelAnnotations ?? []);
-  return { provider: 'google', decision, reason, scores, labels };
+  const landmarks = normaliseLandmarks(r.landmarkAnnotations ?? []);
+  return { provider: 'google', decision, reason, scores, labels, landmarks };
 }
 
 function base64Encode(bytes: Uint8Array): string {

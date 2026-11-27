@@ -13,7 +13,7 @@
 // ============================================================================
 import { decode as decodeJpeg, encode as encodeJpeg } from 'npm:@jsquash/jpeg@1.6.0';
 import { decode as decodePng } from 'npm:@jsquash/png@3.1.1';
-import { decode as decodeWebp } from 'npm:@jsquash/webp@1.5.0';
+import { decode as decodeWebp, encode as encodeWebp } from 'npm:@jsquash/webp@1.5.0';
 import resize from 'npm:@jsquash/resize@2.1.0';
 import heicDecode from 'npm:heic-decode@2.0.0';
 import exifr from 'npm:exifr@7.1.3';
@@ -21,12 +21,12 @@ import exifr from 'npm:exifr@7.1.3';
 import { config } from './config.ts';
 
 export type ProcessedImage = {
-  display: Uint8Array; // stripped, resized display JPEG
-  thumbnail: Uint8Array; // stripped, resized thumbnail JPEG
+  display: Uint8Array; // stripped, resized display image (WebP or JPEG per config)
+  thumbnail: Uint8Array; // stripped, resized thumbnail, same format
   width: number; // display dimensions
   height: number;
-  mime: 'image/jpeg';
-  ext: 'jpg';
+  mime: 'image/webp' | 'image/jpeg';
+  ext: 'webp' | 'jpg';
 };
 
 async function decodeAny(bytes: Uint8Array, mime: string): Promise<ImageData> {
@@ -48,28 +48,50 @@ function fit(w: number, h: number, maxEdge: number): { width: number; height: nu
   return { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) };
 }
 
-async function toJpeg(img: ImageData, maxEdge: number, quality: number): Promise<{ bytes: Uint8Array; width: number; height: number }> {
+async function encodeSized(
+  img: ImageData,
+  maxEdge: number,
+  format: 'webp' | 'jpeg',
+  quality: number,
+): Promise<{ bytes: Uint8Array; width: number; height: number }> {
   const target = fit(img.width, img.height, maxEdge);
   const sized = target.width === img.width && target.height === img.height
     ? img
     : await resize(img, { width: target.width, height: target.height });
-  const out = await encodeJpeg(sized, { quality });
+  const out = format === 'webp'
+    ? await encodeWebp(sized, { quality })
+    : await encodeJpeg(sized, { quality });
   return { bytes: new Uint8Array(out), width: sized.width, height: sized.height };
 }
 
-/** Decode → strip (via re-encode) → produce display + thumbnail JPEGs. */
+/** Decode → strip (via re-encode) → produce display + thumbnail (WebP by default). */
 export async function processImage(bytes: Uint8Array, mime: string): Promise<ProcessedImage> {
   const decoded = await decodeAny(bytes, mime);
-  const display = await toJpeg(decoded, config.image.displayMaxEdge, config.image.displayQuality);
-  const thumb = await toJpeg(decoded, config.image.thumbnailMaxEdge, config.image.thumbnailQuality);
+  const c = config.image;
+  const webp = c.format === 'webp';
+  const display = await encodeSized(decoded, c.displayMaxEdge, c.format, webp ? c.webpDisplayQuality : c.displayQuality);
+  const thumb = await encodeSized(decoded, c.thumbnailMaxEdge, c.format, webp ? c.webpThumbnailQuality : c.thumbnailQuality);
   return {
     display: display.bytes,
     thumbnail: thumb.bytes,
     width: display.width,
     height: display.height,
-    mime: 'image/jpeg',
-    ext: 'jpg',
+    mime: webp ? 'image/webp' : 'image/jpeg',
+    ext: webp ? 'webp' : 'jpg',
   };
+}
+
+/** True if a WebP file carries any metadata chunk (EXIF, XMP or ICC profile). */
+function webpHasMetadata(b: Uint8Array): boolean {
+  const tag = (o: number) => String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]);
+  if (b.length < 12 || tag(0) !== 'RIFF' || tag(8) !== 'WEBP') return false;
+  for (let o = 12; o + 8 <= b.length;) {
+    const id = tag(o);
+    if (id === 'EXIF' || id === 'XMP ' || id === 'ICCP') return true;
+    const size = b[o + 4] | (b[o + 5] << 8) | (b[o + 6] << 16) | (b[o + 7] << 24);
+    o += 8 + size + (size & 1);
+  }
+  return false;
 }
 
 /**
@@ -78,6 +100,9 @@ export async function processImage(bytes: Uint8Array, mime: string): Promise<Pro
  * pipeline (fail-closed) instead of serving a leaky file.
  */
 export async function verifyStripped(bytes: Uint8Array): Promise<void> {
+  if (webpHasMetadata(bytes)) {
+    throw new Error('strip verification failed: metadata chunk present in WebP output');
+  }
   const gps = await exifr.gps(bytes).catch(() => null);
   if (gps && (gps.latitude != null || gps.longitude != null)) {
     throw new Error('strip verification failed: GPS still present after re-encode');

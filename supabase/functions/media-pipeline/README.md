@@ -25,7 +25,8 @@ in `index.ts`) — nothing is left orphaned in storage.
 | `content-type.ts` | File-type validation by **content inspection** (magic bytes) |
 | `exif.ts` | Step 2 — read GPS + timestamp in-memory |
 | `image.ts` | Step 3 + 6 — decode (incl. HEIC) → strip via re-encode → resize; `verifyStripped` |
-| `vision.ts` | Step 4 — SafeSearch **and** labels in one Vision call; thresholds from config |
+| `vision.ts` | Step 4 — SafeSearch, labels **and** landmarks in one Vision call; thresholds from config |
+| `tag-rules.ts` | Applies admin-tuned `tag_label_rules` (drop / rename) to labels + landmarks before they're suggested |
 | `csam.ts` | Step 5 — `CsamScanner` interface + **stub** (drop in PhotoDNA/Thorn here) |
 | `geo.ts` | Coarse geohash cell (opt-in only) + reverse-geocode integration point |
 | `video.ts` | Duration probe + `VideoTranscoder` integration point (see `scripts/transcode-worker/`) |

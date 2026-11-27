@@ -16,7 +16,7 @@
 // Reference ffmpeg (what the worker runs — verified locally on a real iPhone
 // HEVC .mov, see scripts/transcode-worker/README.md):
 //   ffmpeg -i in.mov -t 60 -map_metadata -1 \
-//     -vf "scale='min(1080,iw)':-2" -c:v libx264 -preset veryfast -crf 23 \
+//     -vf "scale='if(gt(iw,ih),-2,min(1080,iw))':'if(gt(iw,ih),min(1080,ih),-2)'" -c:v libx264 -preset veryfast -crf 23 \
 //     -movflags +faststart -c:a aac -b:a 128k out.mp4
 //   ffmpeg -i out.mp4 -frames:v 1 -q:v 3 poster.jpg
 // (-map_metadata -1 strips container metadata incl. GPS/location atoms.)

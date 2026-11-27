@@ -30,7 +30,17 @@ const SECRET = process.env.TRANSCODER_SECRET || '';
 const STAGING_BUCKET = 'media-staging';
 const SERVING_BUCKET = 'media';
 const MAX_SECONDS = Number(process.env.MAX_VIDEO_SECONDS || 60);
+// 1080p: the SHORT edge is capped (1920x1080 landscape, 1080x1920 portrait).
+// Capping the width instead squashed landscape clips to 1080x608.
 const MAX_EDGE = Number(process.env.MAX_VIDEO_EDGE || 1080);
+// Frame-rate ceiling (60/120/240 fps phone clips → 30). Lower rates pass
+// through untouched. Raise MAX_VIDEO_FPS when storage budget allows.
+const MAX_FPS = Number(process.env.MAX_VIDEO_FPS || 30);
+// Bitrate ceiling on top of CRF: calm clips stay well under it (CRF decides);
+// only busy, high-motion clips are held down. 6 Mbps cut a 7.1 MB 5.5 s 4K
+// clip to 4.5 MB (SSIM 0.919 → 0.910). Raise MAX_VIDEO_KBPS when budget allows.
+const MAX_KBPS = Number(process.env.MAX_VIDEO_KBPS || 6000);
+const SCALE = `scale='if(gt(iw,ih),-2,min(${MAX_EDGE},iw))':'if(gt(iw,ih),min(${MAX_EDGE},ih),-2)'`;
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
@@ -58,13 +68,15 @@ async function transcode({ stagingPath, userId, mediaId }) {
     if (dl.error || !dl.data) throw new Error(`download failed: ${dl.error?.message}`);
     await writeFile(inFile, Buffer.from(await dl.data.arrayBuffer()));
 
-    // 3. transcode: H.264, 60s cap, strip metadata, downscale, faststart
+    // 3. transcode: H.264, 60s cap, strip metadata, downscale to 1080p, cap fps + bitrate, faststart
     await exec('ffmpeg', [
       '-y', '-i', inFile,
       '-t', String(MAX_SECONDS),
       '-map_metadata', '-1',
-      '-vf', `scale='min(${MAX_EDGE},iw)':-2`,
+      '-vf', SCALE,
+      '-fpsmax', String(MAX_FPS),
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+      '-maxrate', `${MAX_KBPS}k`, '-bufsize', `${MAX_KBPS * 2}k`,
       '-movflags', '+faststart',
       '-c:a', 'aac', '-b:a', '128k',
       outFile,
