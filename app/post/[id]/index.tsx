@@ -59,6 +59,7 @@ import {
   type PostDetail,
   type PostMediaItem,
 } from '@/lib/posts';
+import { formatPostDate, isOpenablePlace, placeHref } from '@/lib/places';
 import { getProfilePostIds } from '@/lib/profile';
 import { downloadOwnPostMedia } from '@/lib/share';
 
@@ -587,20 +588,38 @@ export default function PostViewScreen() {
               />
             </View>
           ) : null}
+          {/* Where and when (27 Nov). The place opens its page — "let me take my
+              dog there"; with no place, the date still shows on its own. */}
+          {post.place ? (
+            <Pressable
+              onPress={isOpenablePlace(post.place) ? () => router.push(placeHref(post.place!)) : undefined}
+              disabled={!isOpenablePlace(post.place)}
+              accessibilityRole="link"
+              accessibilityLabel={`Open ${post.place.label}`}
+              style={({ pressed }) => [styles.placeRow, pressed && { opacity: 0.7 }]}>
+              <Ionicons name={post.place.isBusiness ? 'storefront' : 'location'} size={18} color={BRAND.accent} />
+              <View style={styles.placeText}>
+                <ThemedText type="smallBold" numberOfLines={1}>
+                  {post.place.label}
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {formatPostDate(post.created_at)}
+                </ThemedText>
+              </View>
+              {isOpenablePlace(post.place) ? (
+                <Ionicons name="chevron-forward" size={16} color={theme.textSecondary} />
+              ) : null}
+            </Pressable>
+          ) : (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.dateOnly}>
+              {formatPostDate(post.created_at)}
+            </ThemedText>
+          )}
+
           {post.caption ? (
             <MentionText type="default" style={styles.caption}>
               {post.caption}
             </MentionText>
-          ) : null}
-
-          {/* #61: the tagged place, finally visible. */}
-          {post.location_label ? (
-            <View style={styles.locationRow}>
-              <Ionicons name="location-outline" size={14} color={theme.textSecondary} />
-              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                {post.location_label}
-              </ThemedText>
-            </View>
           ) : null}
 
           {post.tags.length > 0 ? (
@@ -938,7 +957,17 @@ const styles = StyleSheet.create({
   stats: { flexDirection: 'row', gap: 20 },
   stat: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   caption: {},
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: -8 },
+  placeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: 'rgba(245, 81, 14, 0.10)',
+  },
+  placeText: { flex: 1, minWidth: 0 },
+  dateOnly: { marginTop: -6 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tag: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
   previewWrap: { gap: 6, marginTop: 12 },
