@@ -16,8 +16,10 @@ import {
   getCellPosts,
   getMapPins,
   getVenuePosts,
+  recordSponsoredClick,
   type MapPin,
   type SearchCategory,
+  type SponsoredResult,
 } from '@/lib/search';
 
 /**
@@ -29,7 +31,24 @@ import {
  *   - cell clusters: located posts with NO venue, merged into their coarse
  *     ~5km cell — pins only ever at venues or cell centres, never at a person.
  * Tapping any pin opens its photos, so browsing is place-first (Saj's ask).
+ *
+ * Stage 1 of the places plan (agreed 2026-11-27): a strict pin budget so the
+ * map never becomes a wall of pins. At most PIN_BUDGET venue chips per
+ * viewport, ranked purely by what users did there (pinScore); everything past
+ * the budget folds into "+N" bubbles that zoom in on tap, so nothing matching
+ * the search ever disappears — zooming re-allocates the budget to the smaller
+ * area (the Apple Photos model). Up to SPONSORED_SLOTS of the budget are
+ * reserved for sponsored placements (the existing get_sponsored_results
+ * system), always labelled. The grid view stays the uncapped catalogue.
  */
+
+/** Stage 1 budget: at most this many venue pins in view at once. */
+const PIN_BUDGET = 20;
+/** Of which at most this many are sponsored placements (server also caps at 2). */
+const SPONSORED_SLOTS = 2;
+/** Below this latitudeDelta (~4.4km tall viewport) Apple's own POI labels are
+ *  hidden, so at street zoom Phixr pins are the only pins. */
+const STREET_ZOOM_DELTA = 0.04;
 
 type VenuePin = MapPin & { lat: number; lon: number };
 type CellPin = MapPin & { centre: { lat: number; lon: number } };
@@ -60,6 +79,30 @@ function clusterVenues(venues: VenuePin[], region: Region): Cluster[] {
   return [...buckets.values()];
 }
 
+/**
+ * Stage 1 ranking — purely user-driven (Saj's sign-off): post volume (damped),
+ * bot-cleaned like rate, and how recently anyone posted there. Deliberately NO
+ * signal from the venue owner's own app activity — a dormant business whose
+ * customers still post and like it keeps earning its pin.
+ */
+function pinScore(v: VenuePin): number {
+  const volume = Math.log1p(v.post_count);
+  const quality = v.like_rate ?? 0.5; // neutral prior until anyone swipes
+  const ageDays = v.last_post_at
+    ? Math.max(0, (Date.now() - Date.parse(v.last_post_at)) / 86_400_000)
+    : 365;
+  const recency = Math.exp(-ageDays / 30); // fades over ~a month
+  return volume * (0.5 + quality) + recency;
+}
+
+/** Inside the visible region, with a 20% margin so edge pins don't pop late. */
+function inRegion(lat: number, lon: number, r: Region): boolean {
+  return (
+    Math.abs(lat - r.latitude) <= r.latitudeDelta * 0.6 &&
+    Math.abs(lon - r.longitude) <= r.longitudeDelta * 0.6
+  );
+}
+
 function todayHours(b: VenueBusiness): string | null {
   if (!b.business_hours) return null;
   const key = (['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const)[new Date().getDay()];
@@ -74,7 +117,17 @@ function formatDistance(m: number): string {
   return `${(m / 1609.34).toFixed(1)} miles`;
 }
 
-export function LocalMap({ query, category }: { query: string; category: SearchCategory }) {
+export function LocalMap({
+  query,
+  category,
+  sponsored,
+}: {
+  query: string;
+  category: SearchCategory;
+  /** Passed down from the search screen's single fetch, so map + grid share
+   *  one impression count per search. */
+  sponsored?: SponsoredResult[];
+}) {
   const theme = useTheme();
   const router = useRouter();
   const mapRef = useRef<MapView>(null);
@@ -163,10 +216,69 @@ export function LocalMap({ query, category }: { query: string; category: SearchC
     }
   };
 
-  const clusters = useMemo(
-    () => (region ? clusterVenues(venuePins, region) : []),
-    [venuePins, region],
+  // Sponsored placements (max SPONSORED_SLOTS): the only guaranteed pins,
+  // always labelled. Where the venue also has an organic pin we reuse it (its
+  // post count and like rate are real); otherwise we build a bare pin from the
+  // venue's public coordinates.
+  const sponsoredPins = useMemo<{ sp: SponsoredResult; pin: VenuePin }[]>(
+    () =>
+      (sponsored ?? [])
+        .filter((sp) => sp.venue_lat != null && sp.venue_lon != null)
+        .slice(0, SPONSORED_SLOTS)
+        .map((sp) => ({
+          sp,
+          pin:
+            venuePins.find((v) => v.id === sp.venue_id) ??
+            ({
+              kind: 'venue',
+              id: sp.venue_id,
+              name: sp.venue_name,
+              category_group: null,
+              lat: sp.venue_lat!,
+              lon: sp.venue_lon!,
+              post_count: 0,
+              is_business: true,
+              like_rate: null,
+              distance_m: sp.distance_m,
+              cell: null,
+              last_post_at: null,
+            } satisfies VenuePin),
+        })),
+    [sponsored, venuePins],
   );
+  const sponsoredIds = useMemo(() => new Set(sponsoredPins.map((s) => s.pin.id)), [sponsoredPins]);
+
+  // Stage 1 budget: rank the organic venues visible right now and keep the
+  // top of the list; the rest fold into "+N" bubbles below. Re-runs on every
+  // pan/zoom, so zooming in re-allocates the budget to the smaller area.
+  const { budgeted, overflow } = useMemo(() => {
+    if (!region) return { budgeted: [] as VenuePin[], overflow: [] as VenuePin[] };
+    const visible = venuePins.filter((v) => !sponsoredIds.has(v.id) && inRegion(v.lat, v.lon, region));
+    const scored = [...visible].sort((a, b) => pinScore(b) - pinScore(a) || a.id.localeCompare(b.id));
+    const sponsoredVisible = sponsoredPins.filter((s) => inRegion(s.pin.lat, s.pin.lon, region)).length;
+    const slots = Math.max(0, PIN_BUDGET - sponsoredVisible);
+    return { budgeted: scored.slice(0, slots), overflow: scored.slice(slots) };
+  }, [venuePins, sponsoredPins, sponsoredIds, region]);
+
+  const clusters = useMemo(
+    () => (region ? clusterVenues(budgeted, region) : []),
+    [budgeted, region],
+  );
+  const overflowClusters = useMemo(
+    () => (region ? clusterVenues(overflow, region) : []),
+    [overflow, region],
+  );
+
+  const zoomInto = (c: Cluster) =>
+    mapRef.current?.animateToRegion(
+      {
+        latitude: c.lat,
+        longitude: c.lon,
+        latitudeDelta: (region?.latitudeDelta ?? 0.1) / 3,
+        longitudeDelta: (region?.longitudeDelta ?? 0.1) / 3,
+      },
+      250,
+    );
 
   const directions = (pin: VenuePin) => {
     const url = Platform.select({
@@ -203,23 +315,16 @@ export function LocalMap({ query, category }: { query: string; category: SearchC
         initialRegion={region ?? undefined}
         onRegionChangeComplete={setRegion}
         showsUserLocation={false}
+        // Stage 1: at street zoom Apple's own POI labels disappear, so Phixr
+        // pins are the only pins on the map.
+        showsPointsOfInterests={(region?.latitudeDelta ?? 1) >= STREET_ZOOM_DELTA}
         toolbarEnabled={false}>
         {clusters.map((c, i) =>
           c.venues.length > 1 ? (
             <Marker
               key={`c-${i}-${c.venues.length}`}
               coordinate={{ latitude: c.lat, longitude: c.lon }}
-              onPress={() =>
-                mapRef.current?.animateToRegion(
-                  {
-                    latitude: c.lat,
-                    longitude: c.lon,
-                    latitudeDelta: (region?.latitudeDelta ?? 0.1) / 3,
-                    longitudeDelta: (region?.longitudeDelta ?? 0.1) / 3,
-                  },
-                  250,
-                )
-              }>
+              onPress={() => zoomInto(c)}>
               <View style={styles.mergePin}>
                 <ThemedText type="smallBold" style={styles.pinText}>
                   {c.venues.length}
@@ -252,6 +357,43 @@ export function LocalMap({ query, category }: { query: string; category: SearchC
             </Marker>
           ),
         )}
+        {/* Stage 1 overflow: venues past the budget, folded into "+N" bubbles
+            that zoom in on tap — nothing matching the search disappears. */}
+        {overflowClusters.map((c, i) => (
+          <Marker
+            key={`of-${i}-${c.venues.length}`}
+            coordinate={{ latitude: c.lat, longitude: c.lon }}
+            onPress={() => zoomInto(c)}>
+            <View style={styles.overflowPin}>
+              <ThemedText type="smallBold" style={styles.pinText}>
+                +{c.venues.length}
+              </ThemedText>
+            </View>
+          </Marker>
+        ))}
+        {/* Sponsored placements: guaranteed, and always labelled. */}
+        {sponsoredPins.map(({ sp, pin }) => (
+          <Marker
+            key={`sp-${sp.id}`}
+            coordinate={{ latitude: pin.lat, longitude: pin.lon }}
+            onPress={() => {
+              recordSponsoredClick(sp.id);
+              void openVenue(pin);
+            }}>
+            <View style={styles.pinCol}>
+              <View style={[styles.venuePin, styles.bizPin]}>
+                <Ionicons name="storefront" size={14} color="#fff" />
+                <ThemedText type="smallBold" style={styles.pinText} numberOfLines={1}>
+                  {pin.name}
+                </ThemedText>
+                <View style={styles.adChip}>
+                  <ThemedText style={styles.adChipText}>Sponsored</ThemedText>
+                </View>
+              </View>
+              <View style={[styles.pinStem, { backgroundColor: BRAND.accent }]} />
+            </View>
+          </Marker>
+        ))}
         {cellPins.map((p) => (
           <Marker
             key={p.id}
@@ -279,6 +421,13 @@ export function LocalMap({ query, category }: { query: string; category: SearchC
                   <View style={styles.bizBadge}>
                     <ThemedText type="small" style={styles.bizBadgeText}>
                       BUSINESS
+                    </ThemedText>
+                  </View>
+                ) : null}
+                {selected.kind === 'venue' && sponsoredIds.has(selected.pin.id) ? (
+                  <View style={styles.bizBadge}>
+                    <ThemedText type="small" style={styles.bizBadgeText}>
+                      SPONSORED
                     </ThemedText>
                   </View>
                 ) : null}
@@ -415,6 +564,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Beyond-the-budget "+N" bubble: visually quieter than the accent merge
+  // bubble, so the budgeted chips stay the loudest thing on the map.
+  overflowPin: {
+    minWidth: 30,
+    height: 30,
+    borderRadius: 15,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(42, 42, 40, 0.85)',
+    borderWidth: 2,
+    borderColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  adChip: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  adChipText: { color: '#fff', fontSize: 9, fontWeight: '700', lineHeight: 12 },
   pinText: { color: '#fff' },
   card: {
     position: 'absolute',

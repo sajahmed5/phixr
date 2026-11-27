@@ -426,7 +426,7 @@ export default function SearchScreen() {
       ) : mode === 'local' && localView === 'map' ? (
         // #71: the map browses the same result set as the grid — pins follow
         // the live query and chip.
-        <LocalMap query={query} category={category} />
+        <LocalMap query={query} category={category} sponsored={sponsored} />
       ) : (
         <PostsGrid
           data={posts}

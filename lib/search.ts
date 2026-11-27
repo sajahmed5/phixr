@@ -34,6 +34,10 @@ export type SponsoredResult = {
   venue_name: string;
   venue_category: string | null;
   distance_m: number;
+  /** Stage 1: the venue's public coordinates, so the map can pin a sponsored
+   *  placement even when no organic pin exists for it. */
+  venue_lat: number | null;
+  venue_lon: number | null;
 };
 
 export async function getSponsoredResults(q: string): Promise<SponsoredResult[]> {
@@ -83,6 +87,8 @@ export type MapPin = {
   like_rate: number | null;
   distance_m: number | null;
   cell: string | null;
+  /** Stage 1 (pin budget): when the venue's newest matching post was made. */
+  last_post_at: string | null;
 };
 
 export async function getMapPins(q: string, category: SearchCategory): Promise<MapPin[]> {
