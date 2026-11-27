@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -424,7 +424,9 @@ export default function SearchScreen() {
           }}
         />
       ) : mode === 'local' && localView === 'map' ? (
-        <LocalMap />
+        // #71: the map browses the same result set as the grid — pins follow
+        // the live query and chip.
+        <LocalMap query={query} category={category} />
       ) : (
         <PostsGrid
           data={posts}
@@ -761,6 +763,43 @@ function PostsGrid({
   const { width } = useWindowDimensions();
   const cell = Math.floor((width - 4) / 3);
 
+  // #73: Local results lead with PLACES. Posts tagged at a venue group under a
+  // venue card — a hidden gem surfaces because customers tagged it, whether or
+  // not the business is on any platform — and venueless located posts follow
+  // as the plain grid.
+  type VenueGroup = {
+    venueId: string;
+    name: string;
+    isBusiness: boolean;
+    distanceM: number | null;
+    people: number;
+    posts: SearchPost[];
+  };
+  const venueGroups = useMemo<VenueGroup[]>(() => {
+    if (mode !== 'local') return [];
+    const groups = new Map<string, VenueGroup & { peopleSet: Set<string> }>();
+    for (const p of data) {
+      if (!p.venue_id || !p.venue_name) continue;
+      let g = groups.get(p.venue_id);
+      if (!g) {
+        g = {
+          venueId: p.venue_id,
+          name: p.venue_name,
+          isBusiness: !!p.venue_is_business,
+          distanceM: p.distance_m ?? null,
+          people: 0,
+          posts: [],
+          peopleSet: new Set<string>(),
+        };
+        groups.set(p.venue_id, g);
+      }
+      g.posts.push(p);
+      g.peopleSet.add(p.user_id);
+    }
+    return [...groups.values()].map((g) => ({ ...g, people: g.peopleSet.size }));
+  }, [data, mode]);
+  const loose = mode === 'local' && venueGroups.length > 0 ? data.filter((p) => !p.venue_id) : data;
+
   if (mode === 'local' && !localReady) {
     return <EmptyState icon="location-outline" text="Set a place to search nearby — tap Change above." />;
   }
@@ -775,37 +814,103 @@ function PostsGrid({
 
   return (
     <FlatList
-      data={data}
+      data={loose}
       key="grid"
       numColumns={3}
       keyExtractor={(p) => p.id}
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ paddingBottom: bottomInset + 16 }}
       ListHeaderComponent={
-        related.length > 0 ? (
-          <View style={styles.related}>
+        <View>
+          {related.length > 0 ? (
+            <View style={styles.related}>
+              <View style={styles.sectionHead}>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  ACCOUNTS
+                </ThemedText>
+              </View>
+              {related.map((a) => (
+                <AccountRow key={a.id} account={a} onOpen={onOpenAccount} />
+              ))}
+              <View style={styles.sectionHead}>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  POSTS
+                </ThemedText>
+              </View>
+            </View>
+          ) : null}
+          {venueGroups.map((g) => (
+            <View key={g.venueId} style={[styles.venueCard, { borderColor: theme.border }]}>
+              <View style={styles.venueHead}>
+                <Ionicons
+                  name={g.isBusiness ? 'storefront' : 'location-outline'}
+                  size={18}
+                  color={g.isBusiness ? BRAND.accent : theme.textSecondary}
+                />
+                <View style={styles.venueTitle}>
+                  <View style={styles.venueNameRow}>
+                    <ThemedText type="smallBold" numberOfLines={1} style={{ flexShrink: 1 }}>
+                      {g.name}
+                    </ThemedText>
+                    {g.isBusiness ? (
+                      <View style={styles.venueBizBadge}>
+                        <ThemedText type="small" style={styles.venueBizText}>
+                          BUSINESS
+                        </ThemedText>
+                      </View>
+                    ) : null}
+                  </View>
+                  <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                    {g.distanceM != null ? `${(g.distanceM / 1609.34).toFixed(1)} mi · ` : ''}
+                    {g.posts.length} picture{g.posts.length === 1 ? '' : 's'} from {g.people}{' '}
+                    {g.people === 1 ? 'person' : 'people'}
+                  </ThemedText>
+                </View>
+              </View>
+              <View style={styles.venueThumbs}>
+                {g.posts.slice(0, 4).map((p, i) => (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => onOpen(data.indexOf(p))}
+                    style={styles.venueThumbWrap}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open picture at ${g.name}`}>
+                    <Image source={{ uri: p.thumbnail_url }} style={styles.venueThumb} contentFit="cover" recyclingKey={p.id} />
+                    {i === 3 && g.posts.length > 4 ? (
+                      <View style={styles.venueMore}>
+                        <ThemedText type="smallBold" style={{ color: '#fff' }}>
+                          +{g.posts.length - 4}
+                        </ThemedText>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ))}
+          {venueGroups.length > 0 && loose.length > 0 ? (
             <View style={styles.sectionHead}>
               <ThemedText type="smallBold" themeColor="textSecondary">
-                ACCOUNTS
+                MORE NEARBY
               </ThemedText>
             </View>
-            {related.map((a) => (
-              <AccountRow key={a.id} account={a} onOpen={onOpenAccount} />
-            ))}
-            <View style={styles.sectionHead}>
-              <ThemedText type="smallBold" themeColor="textSecondary">
-                POSTS
-              </ThemedText>
-            </View>
-          </View>
-        ) : null
+          ) : null}
+        </View>
       }
-      renderItem={({ item, index }) => (
-        <Pressable onPress={() => onOpen(index)} style={{ width: cell, height: cell, padding: 1 }}>
+      renderItem={({ item }) => (
+        <Pressable onPress={() => onOpen(data.indexOf(item))} style={{ width: cell, height: cell, padding: 1 }}>
           <Image source={{ uri: item.thumbnail_url }} style={styles.gridImg} contentFit="cover" recyclingKey={item.id} />
           {item.media_type === 'video' ? (
             <View style={styles.playBadge}>
               <Ionicons name="play" size={12} color="#fff" />
+            </View>
+          ) : null}
+          {item.location_label ? (
+            <View style={styles.gridLocBadge}>
+              <Ionicons name="location" size={8} color="#fff" />
+              <ThemedText type="small" style={styles.gridLocText} numberOfLines={1}>
+                {item.location_label}
+              </ThemedText>
             </View>
           ) : null}
         </Pressable>
@@ -1022,6 +1127,51 @@ const styles = StyleSheet.create({
   tagIcon: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   discoverLoading: { padding: 48, alignItems: 'center' },
   gridImg: { flex: 1, borderRadius: 2, backgroundColor: '#222' },
+  gridLocBadge: {
+    position: 'absolute',
+    left: 4,
+    bottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    maxWidth: '90%',
+  },
+  gridLocText: { color: '#fff', fontSize: 9 },
+  venueCard: {
+    marginHorizontal: 12,
+    marginTop: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    padding: 10,
+    gap: 8,
+  },
+  venueHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  venueTitle: { flex: 1, minWidth: 0 },
+  venueNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  venueBizBadge: {
+    backgroundColor: 'rgba(245, 81, 14, 0.12)',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  venueBizText: { color: BRAND.accent, fontSize: 9, fontWeight: '700' },
+  venueThumbs: { flexDirection: 'row', gap: 4 },
+  venueThumbWrap: { flex: 1, aspectRatio: 1, borderRadius: 8, overflow: 'hidden' },
+  venueThumb: { width: '100%', height: '100%' },
+  venueMore: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   playBadge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 999, padding: 3 },
   related: {},
   reloc: { marginHorizontal: 12, marginBottom: 8, padding: 10, borderRadius: 10, borderWidth: 1, gap: 8 },

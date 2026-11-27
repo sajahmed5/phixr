@@ -53,9 +53,40 @@ export function geohashEncode(lat: number, lon: number, precision: number): stri
   return hash;
 }
 
-/** The coarse cell we may store — never precise coordinates. */
+/** The coarse cell we may store — never precise coordinates. The `gh5:` prefix
+ *  matches the media pipeline and `local_cells()`; without it Local search can
+ *  never match the post (feedback #69 — picker-located posts were invisible). */
 export function coarseCell(lat: number, lon: number): string {
-  return geohashEncode(lat, lon, CELL_PRECISION);
+  return `gh${CELL_PRECISION}:` + geohashEncode(lat, lon, CELL_PRECISION);
+}
+
+/**
+ * Decode a stored cell ('gh5:gcw2n') back to its centre, for placing cluster
+ * pins on the Local map (#71). Inverse of geohashEncode; coarse by design.
+ */
+export function decodeCell(cell: string): { lat: number; lon: number } | null {
+  const hash = cell.includes(':') ? cell.split(':')[1] : cell;
+  if (!hash) return null;
+  let latLo = -90, latHi = 90, lonLo = -180, lonHi = 180;
+  let even = true;
+  for (const ch of hash) {
+    const idx = BASE32.indexOf(ch);
+    if (idx < 0) return null;
+    for (let bit = 4; bit >= 0; bit--) {
+      const on = (idx >> bit) & 1;
+      if (even) {
+        const mid = (lonLo + lonHi) / 2;
+        if (on) lonLo = mid;
+        else lonHi = mid;
+      } else {
+        const mid = (latLo + latHi) / 2;
+        if (on) latLo = mid;
+        else latHi = mid;
+      }
+      even = !even;
+    }
+  }
+  return { lat: (latLo + latHi) / 2, lon: (lonLo + lonHi) / 2 };
 }
 
 /** Request permission + read the device's current position. Returns null if denied. */
