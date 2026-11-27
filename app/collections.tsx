@@ -21,6 +21,7 @@ import {
   type Collection,
 } from '@/lib/bookmarks';
 import { confirm } from '@/lib/confirm';
+import { mediaSource } from '@/lib/media';
 
 /**
  * Part 14E: manage saved collections — rename, reorder (tap the arrows, same
@@ -110,7 +111,7 @@ export default function CollectionsScreen() {
           renderItem={({ item, index }) => (
             <View style={[styles.row, { borderColor: theme.border }]}>
               {item.cover_url ? (
-                <Image source={{ uri: item.cover_url }} style={styles.cover} contentFit="cover" />
+                <Image source={mediaSource(item.cover_url)} style={styles.cover} contentFit="cover" />
               ) : (
                 <View style={[styles.cover, { backgroundColor: theme.backgroundElement }]} />
               )}
@@ -219,7 +220,7 @@ export default function CollectionsScreen() {
                     Alert.alert("Couldn't set cover", 'Please try again.');
                   }
                 }}>
-                <Image source={{ uri: p.thumbnail_url }} style={styles.coverOption} contentFit="cover" />
+                <Image source={mediaSource(p.thumbnail_url)} style={styles.coverOption} contentFit="cover" />
               </Pressable>
             ))}
           </View>

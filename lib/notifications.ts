@@ -1,9 +1,14 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { supabase } from '@/lib/supabase';
+
+/** Re-upsert a push token at most this often when nothing about it changed. */
+const REREGISTER_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+const registeredKey = (userId: string) => `push_registered:${userId}`;
 
 export type NotificationType =
   | 'new_follower'
@@ -73,14 +78,27 @@ export async function registerPushToken(): Promise<RegisterResult> {
     const { data: token } = await Notifications.getExpoPushTokenAsync(
       projectId ? { projectId } : undefined,
     );
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) return 'unavailable';
+    const { data: s } = await supabase.auth.getSession();
+    const userId = s.session?.user.id;
+    if (!userId) return 'unavailable';
+    // Same token already registered recently for this account → skip the upsert.
+    // (Cold starts otherwise re-upsert an unchanged row on every launch.)
+    try {
+      const prev = await AsyncStorage.getItem(registeredKey(userId));
+      if (prev) {
+        const { token: t, at } = JSON.parse(prev) as { token: string; at: number };
+        if (t === token && Date.now() - at < REREGISTER_AFTER_MS) return 'registered';
+      }
+    } catch {
+      // Unreadable marker — fall through and register normally.
+    }
     await supabase.from('push_tokens').upsert({
       token,
-      user_id: u.user.id,
+      user_id: userId,
       platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
       updated_at: new Date().toISOString(),
     });
+    void AsyncStorage.setItem(registeredKey(userId), JSON.stringify({ token, at: Date.now() })).catch(() => {});
     return 'registered';
   } catch {
     // No EAS project configured, or Expo push service unreachable — non-fatal.

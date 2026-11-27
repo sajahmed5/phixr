@@ -11,10 +11,11 @@ import { Avatar } from '@/components/ui/avatar';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { confirm } from '@/lib/confirm';
+import { mediaSource } from '@/lib/media';
+import { supabase } from '@/lib/supabase';
 import {
   getConversation,
   getConversationMedia,
-  getConversations,
   getSharedGroups,
   leaveConversation,
   reportConversation,
@@ -58,13 +59,23 @@ export default function ConversationDetailsScreen() {
       }
       setDetail(d);
       const otherId = d.members.find((m) => m.id !== meId)?.id;
-      const [mediaRows, convos, groupRows] = await Promise.all([
+      const [mediaRows, mine, groupRows] = await Promise.all([
         getConversationMedia(cid).catch(() => []),
-        getConversations().catch(() => []),
+        // Just my membership row — this used to pull the ENTIRE inbox (every
+        // conversation with its last message) to read these two booleans.
+        supabase
+          .from('conversation_members')
+          .select('muted, pinned')
+          .eq('conversation_id', cid)
+          .eq('user_id', meId ?? '')
+          .maybeSingle()
+          .then(
+            (r) => r.data as { muted: boolean; pinned: boolean } | null,
+            () => null,
+          ),
         d.type === 'direct' && otherId ? getSharedGroups(otherId).catch(() => []) : Promise.resolve([]),
       ]);
       setMedia(mediaRows);
-      const mine = convos.find((c) => c.id === cid);
       setMutedState(mine?.muted ?? false);
       setPinnedState(mine?.pinned ?? false);
       setGroups(groupRows);
@@ -173,7 +184,7 @@ export default function ConversationDetailsScreen() {
           ) : (
             <View style={[styles.grid, { paddingHorizontal: gap }]}>
               {media.slice(0, 40).map((m) => (
-                <Image key={m.message_id} source={{ uri: m.media_url }} style={{ width: cell, height: cell, margin: gap / 2, borderRadius: 6 }} contentFit="cover" />
+                <Image key={m.message_id} source={mediaSource(m.media_url)} style={{ width: cell, height: cell, margin: gap / 2, borderRadius: 6 }} contentFit="cover" />
               ))}
             </View>
           )}

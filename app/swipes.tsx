@@ -16,6 +16,7 @@ import { ThemedView } from '@/components/themed-view';
 import { BRAND } from '@/constants/config';
 import { confirm } from '@/lib/confirm';
 import { getMySwipes, undoSwipe, type SwipedPost, type SwipeDirection } from '@/lib/deck';
+import { mediaSource } from '@/lib/media';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -112,7 +113,7 @@ function Grid({
           style={{ width: size, height: size }}
           accessibilityRole="button"
           accessibilityLabel="Open post">
-          <Image source={{ uri: item.thumbnail_url }} style={styles.thumb} contentFit="cover" recyclingKey={item.post_id} />
+          <Image source={mediaSource(item.thumbnail_url)} style={styles.thumb} contentFit="cover" recyclingKey={item.post_id} />
           <Pressable
             onPress={() => onUndo(item.post_id)}
             hitSlop={6}

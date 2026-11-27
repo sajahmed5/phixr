@@ -1,9 +1,14 @@
+import { Image } from 'expo-image';
+import { Platform } from 'react-native';
+
 import { getClientSettings, settingNumber } from '@/lib/settings';
 import { supabase } from '@/lib/supabase';
 import type { DeckCard } from '@/lib/deck';
 
 const MEDIA_BUCKET = 'media';
 const SIGNED_URL_TTL = 60 * 60 * 2; // 2 hours — comfortably longer than a deck session
+/** sign_media refuses batches over 300 keys; stay under it and sign in chunks. */
+const SIGN_BATCH = 300;
 
 /**
  * A post's media_url / thumbnail_url is an object KEY in the private `media` bucket
@@ -28,9 +33,14 @@ export async function signMediaPaths(paths: string[]): Promise<Map<string, strin
   if (unique.length === 0) return map;
 
   if (await mediaCdnEnabled()) {
-    const { data } = await supabase.rpc('sign_media', { _keys: unique });
-    for (const row of (data ?? []) as { key: string; url: string }[]) {
-      if (row.key && row.url) map.set(row.key, row.url);
+    // sign_media raises on more than 300 keys (and the error was previously swallowed,
+    // silently routing whole grids to billed Supabase Storage) — chunk instead.
+    for (let i = 0; i < unique.length; i += SIGN_BATCH) {
+      const { data, error } = await supabase.rpc('sign_media', { _keys: unique.slice(i, i + SIGN_BATCH) });
+      if (error) break; // fall through to Supabase signing for the rest
+      for (const row of (data ?? []) as { key: string; url: string }[]) {
+        if (row.key && row.url) map.set(row.key, row.url);
+      }
     }
   }
 
@@ -101,6 +111,53 @@ export function storagePathFromUrl(url: string): string {
     return decodeURIComponent(m[1]);
   } catch {
     return m[1];
+  }
+}
+
+/**
+ * Sign only a batch's grid thumbnails. For thumbnail-only screens (search, discover,
+ * tag grids): resolveDeckMedia would also sign every full-bleed media_url and fetch +
+ * sign all carousel extras — none of which a grid renders.
+ */
+export async function resolveThumbMedia<T extends { thumbnail_url: string }>(rows: T[]): Promise<T[]> {
+  if (rows.length === 0) return rows;
+  const signed = await signMediaPaths(rows.map((r) => r.thumbnail_url));
+  return rows.map((r) => ({ ...r, thumbnail_url: signed.get(r.thumbnail_url) ?? r.thumbnail_url }));
+}
+
+/**
+ * expo-image source for (possibly signed) media. The cache key is the stable bucket
+ * path, not the signed URL: signature tokens rotate on every re-sign (Supabase) or
+ * every hour (R2), and without a fixed key each rotation busts the disk cache and
+ * re-downloads bytes the phone already has. For non-signed URLs the key equals the
+ * URL, which is expo-image's default behaviour.
+ */
+export function mediaSource(uri: string | null | undefined): { uri: string; cacheKey: string } | undefined {
+  if (!uri) return undefined;
+  return { uri, cacheKey: storagePathFromUrl(uri) };
+}
+
+/**
+ * Warm an image into the disk cache under its stable bucket-path key. Native
+ * Image.prefetch can't take a cacheKey — it stores under the signed URL, which the
+ * cacheKey'd <Image> never looks up, so it would download every image twice. loadAsync
+ * honours the source's cacheKey; the decoded bitmap it returns is released at once
+ * (only the disk copy is wanted). Skips the download when the key is already on disk.
+ * Web has no keyed cache (the browser HTTP cache is by URL), so it keeps Image.prefetch.
+ */
+export async function prefetchImage(uri: string): Promise<void> {
+  const source = mediaSource(uri);
+  if (!source) return;
+  try {
+    if (Platform.OS === 'web') {
+      await Image.prefetch(uri);
+      return;
+    }
+    if (await Image.getCachePathAsync(source.cacheKey)) return; // already on disk
+    const ref = await Image.loadAsync(source);
+    ref.release();
+  } catch {
+    // Prefetch is best-effort; the render path will fetch on demand.
   }
 }
 

@@ -11,7 +11,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { respondTeamInvite } from '@/lib/business';
 import { getNotifications, type InboxNotification } from '@/lib/notifications';
 import { supabase } from '@/lib/supabase';
-import { signMediaPaths } from '@/lib/media';
+import { mediaSource, signMediaPaths } from '@/lib/media';
 import { useNotifications } from '@/lib/notifications-provider';
 import { formatRelative } from '@/lib/relative-time';
 import { useRefresh } from '@/lib/use-refresh';
@@ -19,7 +19,7 @@ import { useRefresh } from '@/lib/use-refresh';
 export default function NotificationsScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { clearAll, refreshUnread } = useNotifications();
+  const { clearAll } = useNotifications();
   const [rows, setRows] = useState<InboxNotification[] | null>(null);
   const [error, setError] = useState(false);
 
@@ -47,11 +47,12 @@ export default function NotificationsScreen() {
   const refresh = useRefresh(load);
 
   // Load + mark everything read when the inbox opens (badge clears on read).
+  // clearAll already refreshes the unread badge itself — no second refresh call.
   useFocusEffect(
     useCallback(() => {
       void load();
-      void clearAll().then(refreshUnread);
-    }, [load, clearAll, refreshUnread]),
+      void clearAll();
+    }, [load, clearAll]),
   );
 
   function open(n: InboxNotification) {
@@ -234,7 +235,7 @@ function Row({ n, onPress }: { n: InboxNotification; onPress: () => void }) {
         </ThemedText>
       </View>
       {n.post_thumbnail ? (
-        <Image source={{ uri: n.post_thumbnail }} style={styles.thumb} contentFit="cover" />
+        <Image source={mediaSource(n.post_thumbnail)} style={styles.thumb} contentFit="cover" />
       ) : null}
     </Pressable>
   );

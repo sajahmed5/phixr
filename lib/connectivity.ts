@@ -46,6 +46,12 @@ function emitIfChanged(): void {
   for (const l of listeners) l(online);
 }
 
+// NetInfo's default reachability probe HEAD-requests clients3.google.com/generate_204
+// every 60s in the foreground (every 5s while it believes we're offline) on iOS.
+// computeOnline() never reads isInternetReachable — real reachability comes from our own
+// traffic via reportServerReached — so the probe was pure waste, and to a third party.
+NetInfo.configure({ reachabilityShouldRun: () => false });
+
 NetInfo.addEventListener((state) => {
   netState = state;
   netStateAt = Date.now();

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { FormMessage } from '@/components/ui/form-message';
 import { track } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth-context';
+import { signMediaPaths } from '@/lib/media';
 import { supabase } from '@/lib/supabase';
 import { useTheme } from '@/hooks/use-theme';
 import type { SuggestedAccount } from '@/types';
@@ -46,17 +47,24 @@ export default function OnboardingAccountsScreen() {
     // Fetch a few recent public thumbnails per suggested account.
     if (rows.length) {
       const ids = rows.map((r) => r.id);
+      // Capped: suggested accounts are popular, and the unbounded version pulled their
+      // ENTIRE post history to keep 3 thumbnails each.
       const { data: posts } = await supabase
         .from('posts')
         .select('user_id, thumbnail_url, created_at')
         .in('user_id', ids)
         .eq('visibility', 'public')
         .eq('moderation_status', 'approved')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(SUGGESTION_LIMIT * THUMBS_PER_ACCOUNT * 4);
+      const postRows = (posts ?? []) as { user_id: string; thumbnail_url: string }[];
+      // thumbnail_url is a key in the private media bucket — unsigned they never rendered.
+      const signed = await signMediaPaths(postRows.map((p) => p.thumbnail_url));
       const byUser: Record<string, string[]> = {};
-      for (const p of (posts ?? []) as { user_id: string; thumbnail_url: string }[]) {
+      for (const p of postRows) {
         const list = (byUser[p.user_id] ??= []);
-        if (list.length < THUMBS_PER_ACCOUNT) list.push(p.thumbnail_url);
+        const url = signed.get(p.thumbnail_url) ?? p.thumbnail_url;
+        if (list.length < THUMBS_PER_ACCOUNT) list.push(url);
       }
       setThumbs(byUser);
     } else {

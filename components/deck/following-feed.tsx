@@ -5,7 +5,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 
 import { VideoOverlays } from '@/components/video-overlays';
 import { parseVideoOverlays } from '@/lib/video-overlays';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -34,8 +34,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { getBookmarkState } from '@/lib/bookmarks';
 import { fetchFollowingFeed, toggleFeedLike, type DeckCard } from '@/lib/deck';
 import { formatCount } from '@/lib/format';
-import { getExtrasForPosts, type PostMediaItem } from '@/lib/posts';
-import { resolveDeckMedia } from '@/lib/media';
+import { mediaSource, resolveDeckMedia } from '@/lib/media';
 import { formatRelative } from '@/lib/relative-time';
 import { getMuted, setMutedPreference, subscribeMute } from '@/lib/mute-preference';
 import { cachedVideoUri } from '@/lib/video-cache';
@@ -56,7 +55,6 @@ export function FollowingFeed() {
   const [atEnd, setAtEnd] = useState(false);
   const [commentsFor, setCommentsFor] = useState<DeckCard | null>(null);
   const [shareFor, setShareFor] = useState<DeckCard | null>(null);
-  const [extrasMap, setExtrasMap] = useState<Map<string, PostMediaItem[]>>(new Map());
   // Only posts actually on screen play their video — not every video the list has
   // rendered ahead (which used to stream several clips at once).
   const [visibleIds, setVisibleIds] = useState<Set<string>>(() => new Set());
@@ -74,7 +72,6 @@ export function FollowingFeed() {
       const first = await resolveDeckMedia(await fetchFollowingFeed(null, PAGE));
       setCards(first);
       setAtEnd(first.length < PAGE);
-      getExtrasForPosts(first.map((c) => c.id)).then(setExtrasMap).catch(() => {});
     } catch {
       setCards([]);
     }
@@ -102,9 +99,6 @@ export function FollowingFeed() {
       const next = await resolveDeckMedia(await fetchFollowingFeed(before, PAGE));
       setCards((prev) => [...(prev ?? []), ...next]);
       if (next.length < PAGE) setAtEnd(true);
-      getExtrasForPosts(next.map((c) => c.id))
-        .then((m) => setExtrasMap((prev) => new Map([...prev, ...m])))
-        .catch(() => {});
     } catch {
       /* keep what we have */
     } finally {
@@ -141,11 +135,14 @@ export function FollowingFeed() {
         onEndReachedThreshold={0.6}
         viewabilityConfig={viewabilityConfig}
         onViewableItemsChanged={onViewableItemsChanged}
+        // Keep the render window tight: every rendered video card owns a player, and the
+        // FlatList defaults (windowSize 21, 10 initial) mounted a dozen of them at once.
+        initialNumToRender={4}
+        windowSize={5}
         renderItem={({ item }) => (
           <FeedCard
             card={item}
             active={visibleIds.has(item.id)}
-            extras={extrasMap.get(item.id) ?? NO_EXTRAS}
             onOpenComments={() => setCommentsFor(item)}
             onOpenShare={() => setShareFor(item)}
           />
@@ -183,22 +180,22 @@ export function FollowingFeed() {
   );
 }
 
-const NO_EXTRAS: PostMediaItem[] = [];
-
 const FeedCard = memo(function FeedCard({
   card,
   active,
-  extras,
   onOpenComments,
   onOpenShare,
 }: {
   card: DeckCard;
   /** On screen right now — only then does its video play. */
   active: boolean;
-  extras: PostMediaItem[];
   onOpenComments: () => void;
   onOpenShare: () => void;
 }) {
+  // Carousel pages beyond the cover. resolveDeckMedia already fetched and signed these
+  // (card.carousel, cover first) — the feed used to run the same post_media query and
+  // signing a second time via getExtrasForPosts and throw the first result away.
+  const extras = useMemo(() => card.carousel?.slice(1) ?? [], [card.carousel]);
   const theme = useTheme();
   const router = useRouter();
   const { width: winW } = useWindowDimensions();
@@ -268,10 +265,10 @@ const FeedCard = memo(function FeedCard({
       {card.sensitive && !revealed ? <SensitiveCover onReveal={() => setRevealed(true)} /> : null}
       {extras.length === 0 ? (
         card.media_type === 'video' ? (
-          <FeedVideo uri={card.media_url} overlays={card.overlays} active={active} />
+          <FeedVideo uri={card.media_url} poster={card.thumbnail_url} overlays={card.overlays} active={active} />
         ) : (
           <Image
-            source={{ uri: card.media_url }}
+            source={mediaSource(card.media_url)}
             style={styles.media}
             contentFit="cover"
             accessibilityLabel={card.alt_text ?? undefined}
@@ -290,9 +287,13 @@ const FeedCard = memo(function FeedCard({
             {[{ media_url: card.media_url, media_type: card.media_type }, ...extras].map((m, i) => (
               <View key={i} style={{ width: winW }}>
                 {m.media_type === 'video' ? (
-                  <FeedVideo uri={m.media_url} active={active && page === i} />
+                  <FeedVideo
+                    uri={m.media_url}
+                    poster={i === 0 ? card.thumbnail_url : undefined}
+                    active={active && page === i}
+                  />
                 ) : (
-                  <Image source={{ uri: m.media_url }} style={styles.media} contentFit="cover" />
+                  <Image source={mediaSource(m.media_url)} style={styles.media} contentFit="cover" />
                 )}
               </View>
             ))}
@@ -367,15 +368,28 @@ const FeedCard = memo(function FeedCard({
   );
 });
 
-function FeedVideo({ uri, overlays, active }: { uri: string; overlays?: unknown; active: boolean }) {
+function FeedVideo({
+  uri,
+  poster,
+  overlays,
+  active,
+}: {
+  uri: string;
+  poster?: string;
+  overlays?: unknown;
+  active: boolean;
+}) {
   const overlaysParsed = useMemo(() => parseVideoOverlays(overlays), [overlays]);
   const [box, setBox] = useState({ w: 0, h: 0 });
-  // A copy downloaded ahead on Wi-Fi plays without the network; otherwise it streams.
-  const source = useMemo(() => cachedVideoUri(uri), [uri]);
   // Same global, persisted mute preference as the Home deck: muted until the user
   // unmutes once, then that choice carries across cards, tabs and sessions.
   const [muted, setMuted] = useState(getMuted());
-  const player = useVideoPlayer(source, (p) => {
+  // The player starts EMPTY: a paused expo-video player with a source still buffers from
+  // the network, and the list keeps several cards mounted — that streamed clips nobody
+  // watched. The source loads the first time the card is actually on screen; until then
+  // the poster fills the frame. A copy downloaded ahead on Wi-Fi plays from disk.
+  const loaded = useRef(false);
+  const player = useVideoPlayer(null, (p) => {
     p.loop = true;
     p.muted = getMuted();
   });
@@ -383,13 +397,25 @@ function FeedVideo({ uri, overlays, active }: { uri: string; overlays?: unknown;
     player.muted = m;
     setMuted(m);
   }), [player]);
+  // eslint-disable-next-line react-hooks/immutability -- expo-video's player is a mutable controller by design
   useEffect(() => {
-    if (active) {
+    if (active && !loaded.current) {
+      loaded.current = true;
+      player
+        .replaceAsync(cachedVideoUri(uri))
+        // Mute is already current: set at creation and kept in sync by subscribeMute.
+        .then(() => player.play())
+        .catch(() => {
+          loaded.current = false; // let the next activation retry
+        });
+    } else if (active) {
       // eslint-disable-next-line react-hooks/immutability -- expo-video's player is a mutable controller by design
       player.muted = getMuted();
       player.play();
-    } else player.pause();
-  }, [active, player]);
+    } else {
+      player.pause();
+    }
+  }, [active, player, uri]);
   function toggleMute() {
     const next = !muted;
     // eslint-disable-next-line react-hooks/immutability -- expo-video's player is a mutable controller by design
@@ -399,6 +425,9 @@ function FeedVideo({ uri, overlays, active }: { uri: string; overlays?: unknown;
   }
   return (
     <View onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
+      {poster ? (
+        <Image source={mediaSource(poster)} style={[styles.media, StyleSheet.absoluteFill]} contentFit="cover" />
+      ) : null}
       {/* pointerEvents="none": the native VideoView otherwise swallows taps above the JS
           layer (same fix as the Home deck), which would block the mute button. */}
       <VideoView player={player} style={styles.media} contentFit="cover" nativeControls={false} pointerEvents="none" />
