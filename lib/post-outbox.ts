@@ -203,6 +203,7 @@ export class PostOutbox {
           attachLocation: p.draft.attachLocation,
           locationCell: p.draft.locationCell,
           locationLabel: p.draft.locationLabel,
+          placeRef: p.draft.placeRef,
           tags: p.draft.tags,
           overlays: p.overlays,
         });

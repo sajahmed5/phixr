@@ -100,6 +100,49 @@ export async function getMapPins(q: string, category: SearchCategory): Promise<M
   return (data ?? []) as MapPin[];
 }
 
+/**
+ * A real place (Apple Maps) matching the search, for the Local map's hollow
+ * "be the first" pins (Stage 2). `venue_id` is set when Phixr already knows
+ * the place — `post_count` is then its public photo count (which may be photos
+ * that just don't match this search).
+ */
+export type PlaceSuggestion = {
+  provider: string;
+  provider_place_id: string;
+  name: string;
+  category: string | null;
+  category_group: string;
+  address: string | null;
+  lat: number;
+  lon: number;
+  venue_id: string | null;
+  post_count: number;
+};
+
+export type MapBounds = { north: number; south: number; east: number; west: number };
+
+export async function getPlaceSuggestions(
+  q: string,
+  category: SearchCategory,
+  bounds: MapBounds,
+): Promise<PlaceSuggestion[]> {
+  const { data, error } = await supabase.functions.invoke('places', {
+    body: { action: 'suggest', query: q.trim() || undefined, category: category ?? undefined, ...bounds },
+  });
+  if (error) throw error;
+  return ((data as { places?: PlaceSuggestion[] })?.places ?? []).filter(
+    (p) => typeof p.lat === 'number' && typeof p.lon === 'number' && !!p.provider_place_id,
+  );
+}
+
+/** The caller's own Local search centre (a relocated centre, else their location). */
+export async function getMySearchCentre(): Promise<{ lat: number; lon: number } | null> {
+  const { data, error } = await supabase.rpc('get_my_search_centre');
+  if (error) return null;
+  const row = (data as { lat: number; lon: number }[] | null)?.[0];
+  return row && typeof row.lat === 'number' && typeof row.lon === 'number' ? row : null;
+}
+
 export type CellPost = {
   id: string;
   thumbnail_url: string;

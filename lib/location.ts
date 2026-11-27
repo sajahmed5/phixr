@@ -108,7 +108,9 @@ export type NearbyPlace = {
   lon: number;
   /** metres from the search origin, when known. */
   distanceM: number | null;
-  /** Provider identity — needed to claim the place as a business (Part 7C). */
+  /** Provider identity — needed to claim the place as a business (Part 7C)
+   *  and to link a post to the venue (Stage 2). */
+  provider: string | null;
   provider_place_id: string | null;
   category: string | null;
 };
@@ -129,6 +131,7 @@ export async function nearbyPlaces(lat: number, lon: number, query?: string): Pr
     lat?: number | null;
     lon?: number | null;
     distance_m?: number | null;
+    provider?: string | null;
     provider_place_id?: string | null;
     category?: string | null;
   }[];
@@ -140,6 +143,7 @@ export async function nearbyPlaces(lat: number, lon: number, query?: string): Pr
       lat: v.lat as number,
       lon: v.lon as number,
       distanceM: v.distance_m ?? null,
+      provider: v.provider ?? null,
       provider_place_id: v.provider_place_id ?? null,
       category: v.category ?? null,
     }));
