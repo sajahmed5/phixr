@@ -11,6 +11,9 @@ export type SearchPost = DeckCard & {
   /** Local search only: real distance to the venue (or the business's nearest branch). */
   distance_m?: number | null;
   venue_name?: string | null;
+  /** Local search only (#73): the tagged venue, for grouping results by place. */
+  venue_id?: string | null;
+  venue_is_business?: boolean | null;
 };
 
 /** Category filter chips (brief 7A). null = everything. */
@@ -60,6 +63,60 @@ export async function getMapVenues(limit = 200): Promise<MapVenue[]> {
   const { data, error } = await supabase.rpc('get_map_venues', { _limit: limit });
   if (error) throw error;
   return (data ?? []) as MapVenue[];
+}
+
+/**
+ * One pin on the query-aware Local map (#71/#72). 'venue' pins carry lat/lon and
+ * count only the posts matching the live query/chip; 'cell' pins are coarse
+ * ~1km clusters of located posts with no venue — the client decodes `cell` to
+ * place them, so no exact position ever leaves the server.
+ */
+export type MapPin = {
+  kind: 'venue' | 'cell';
+  id: string;
+  name: string | null;
+  category_group: string | null;
+  lat: number | null;
+  lon: number | null;
+  post_count: number;
+  is_business: boolean;
+  like_rate: number | null;
+  distance_m: number | null;
+  cell: string | null;
+};
+
+export async function getMapPins(q: string, category: SearchCategory): Promise<MapPin[]> {
+  const { data, error } = await supabase.rpc('get_map_pins', {
+    _q: q.trim() || null,
+    _category: category,
+  });
+  if (error) throw error;
+  return (data ?? []) as MapPin[];
+}
+
+export type CellPost = {
+  id: string;
+  thumbnail_url: string;
+  media_type: 'image' | 'video';
+  like_count: number;
+  location_label: string | null;
+};
+
+/** The photos behind a cluster pin (venueless by construction). */
+export async function getCellPosts(
+  cellId: string,
+  q: string,
+  category: SearchCategory,
+  limit = 12,
+): Promise<CellPost[]> {
+  const { data, error } = await supabase.rpc('get_cell_posts', {
+    _cell: cellId,
+    _q: q.trim() || null,
+    _category: category,
+    _limit: limit,
+  });
+  if (error) throw error;
+  return (data ?? []) as CellPost[];
 }
 
 export type VenuePost = { id: string; thumbnail_url: string; media_type: 'image' | 'video'; like_count: number };
