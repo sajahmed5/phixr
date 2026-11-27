@@ -104,7 +104,7 @@ export async function processUpload(svc: SupabaseClient, owner: string, bytes: U
     }
 
     // ===== STEP 5: CSAM SCAN (STUB — NOT PRODUCTION READY) =====
-    const csam = await stubScanner.scan(processed.display, { userId: owner, mime: 'image/jpeg' });
+    const csam = await stubScanner.scan(processed.display, { userId: owner, mime: processed.mime });
     if (csam.status === 'reject') {
       await cleanupAll();
       return json({ error: 'rejected', reason: 'content_policy', case_ref: csam.caseRef }, 422);
