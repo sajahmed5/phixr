@@ -7,11 +7,13 @@ import { ThemedText } from '@/components/themed-text';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { coarseCell, getCurrentCoords, type NearbyPlace } from '@/lib/location';
+import type { PlaceRef } from '@/lib/pending-place';
 
 export type LocationValue = {
   attachLocation: boolean;
   locationCell: string | null;
   locationLabel: string | null;
+  placeRef: PlaceRef | null;
 };
 
 /**
@@ -56,11 +58,16 @@ export function LocationField({
   };
 
   const select = (p: NearbyPlace) => {
-    onChange({ attachLocation: true, locationCell: coarseCell(p.lat, p.lon), locationLabel: p.name });
+    onChange({
+      attachLocation: true,
+      locationCell: coarseCell(p.lat, p.lon),
+      locationLabel: p.name,
+      placeRef: p.provider && p.provider_place_id ? { provider: p.provider, provider_place_id: p.provider_place_id } : null,
+    });
     setPickerOpen(false);
   };
 
-  const remove = () => onChange({ attachLocation: false, locationCell: null, locationLabel: null });
+  const remove = () => onChange({ attachLocation: false, locationCell: null, locationLabel: null, placeRef: null });
 
   return (
     <View style={[styles.card, { borderColor: theme.border }]}>

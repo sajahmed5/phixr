@@ -12,12 +12,18 @@ import { useTheme } from '@/hooks/use-theme';
 import { getVenueBusiness, recordBusinessInsight, type VenueBusiness } from '@/lib/business';
 import { decodeCell } from '@/lib/location';
 import { mediaSource, signMediaPaths } from '@/lib/media';
+import { setPendingPlace } from '@/lib/pending-place';
+import { placeHref } from '@/lib/places';
 import {
   getCellPosts,
   getMapPins,
+  getMySearchCentre,
+  getPlaceSuggestions,
   getVenuePosts,
   recordSponsoredClick,
+  type MapBounds,
   type MapPin,
+  type PlaceSuggestion,
   type SearchCategory,
   type SponsoredResult,
 } from '@/lib/search';
@@ -40,6 +46,14 @@ import {
  * area (the Apple Photos model). Up to SPONSORED_SLOTS of the budget are
  * reserved for sponsored placements (the existing get_sponsored_results
  * system), always labelled. The grid view stays the uncapped catalogue.
+ *
+ * Stage 2: at street zoom, real places matching the search (Apple Maps, via
+ * the `places` function) fill whatever budget the photo pins leave — at most
+ * MAX_SUGGESTED, drawn hollow and grey so photo pins stay the loud ones.
+ * Zoomed out they vanish. Tapping one offers "be the first": the next post
+ * starts tagged at that place, and once it lands the place becomes a photo
+ * pin (the server links suggestions to known venues, so it never shows twice).
+ * As content grows it fills the budget and hollow pins stop appearing.
  */
 
 /** Stage 1 budget: at most this many venue pins in view at once. */
@@ -49,12 +63,30 @@ const SPONSORED_SLOTS = 2;
 /** Below this latitudeDelta (~4.4km tall viewport) Apple's own POI labels are
  *  hidden, so at street zoom Phixr pins are the only pins. */
 const STREET_ZOOM_DELTA = 0.04;
+/** Stage 2: at most this many hollow "be the first" pins, and only in budget
+ *  slots the photo pins leave free. */
+const MAX_SUGGESTED = 8;
+/** Suggestion viewports snap outward to this grid (degrees), so small pans
+ *  reuse the same request — here and in the server's cache. */
+const SUGGEST_GRID = 0.005;
 
 type VenuePin = MapPin & { lat: number; lon: number };
 type CellPin = MapPin & { centre: { lat: number; lon: number } };
 type Selected =
   | { kind: 'venue'; pin: VenuePin }
-  | { kind: 'cell'; pin: CellPin };
+  | { kind: 'cell'; pin: CellPin }
+  | { kind: 'suggestion'; place: PlaceSuggestion };
+
+function snapBounds(r: Region): MapBounds {
+  const g = SUGGEST_GRID;
+  const snap = (n: number, up: boolean) => Number(((up ? Math.ceil(n / g) : Math.floor(n / g)) * g).toFixed(4));
+  return {
+    north: snap(r.latitude + r.latitudeDelta / 2, true),
+    south: snap(r.latitude - r.latitudeDelta / 2, false),
+    east: snap(r.longitude + r.longitudeDelta / 2, true),
+    west: snap(r.longitude - r.longitudeDelta / 2, false),
+  };
+}
 type CardPost = { id: string; thumbnail_url: string; signed: string };
 
 type Cluster = { lat: number; lon: number; venues: VenuePin[] };
@@ -137,6 +169,10 @@ export function LocalMap({
   const [cardPosts, setCardPosts] = useState<CardPost[] | null>(null);
   // Part 13E: the verified claiming business's hours, links and offers.
   const [cardBiz, setCardBiz] = useState<VenueBusiness | null>(null);
+  // Stage 2: suggested places per (search, snapped viewport) — kept for the
+  // session so panning back costs nothing.
+  const [suggestCache, setSuggestCache] = useState<Record<string, PlaceSuggestion[]>>({});
+  const wantsSuggestions = !!(query.trim() || category);
 
   const venuePins = useMemo(
     () => (pins ?? []).filter((p): p is VenuePin => p.kind === 'venue' && p.lat != null && p.lon != null),
@@ -173,6 +209,12 @@ export function LocalMap({
             latitudeDelta: Math.max(0.02, (Math.max(...lats) - Math.min(...lats)) * 1.4),
             longitudeDelta: Math.max(0.02, (Math.max(...lons) - Math.min(...lons)) * 1.4),
           });
+        } else if (query.trim() || category) {
+          // No photos match yet: still open the map at the search centre, at
+          // street zoom, so the real places matching the search can show.
+          void getMySearchCentre().then((c) => {
+            if (alive && c) setRegion({ latitude: c.lat, longitude: c.lon, latitudeDelta: 0.02, longitudeDelta: 0.02 });
+          });
         }
       })
       .catch(() => alive && setPins([]));
@@ -180,6 +222,29 @@ export function LocalMap({
       alive = false;
     };
   }, [query, category]);
+
+  // Stage 2: fetch suggested places for the settled street-zoom viewport.
+  const suggestKey = useMemo(() => {
+    if (!region || !wantsSuggestions || region.latitudeDelta >= STREET_ZOOM_DELTA) return null;
+    const b = snapBounds(region);
+    return { key: `${query.trim().toLowerCase()}|${category ?? ''}|${b.north},${b.east},${b.south},${b.west}`, bounds: b };
+  }, [region, wantsSuggestions, query, category]);
+
+  useEffect(() => {
+    if (!suggestKey || suggestCache[suggestKey.key]) return;
+    const { key, bounds } = suggestKey;
+    const t = setTimeout(() => {
+      void getPlaceSuggestions(query, category, bounds)
+        .then((places) => setSuggestCache((c) => ({ ...c, [key]: places })))
+        .catch(() => {});
+    }, 500);
+    return () => clearTimeout(t);
+  }, [suggestKey, suggestCache, query, category]);
+
+  const suggestions = useMemo(
+    () => (suggestKey ? (suggestCache[suggestKey.key] ?? []) : []),
+    [suggestKey, suggestCache],
+  );
 
   const openVenue = async (pin: VenuePin) => {
     setSelected({ kind: 'venue', pin });
@@ -251,14 +316,48 @@ export function LocalMap({
   // Stage 1 budget: rank the organic venues visible right now and keep the
   // top of the list; the rest fold into "+N" bubbles below. Re-runs on every
   // pan/zoom, so zooming in re-allocates the budget to the smaller area.
-  const { budgeted, overflow } = useMemo(() => {
-    if (!region) return { budgeted: [] as VenuePin[], overflow: [] as VenuePin[] };
+  const { budgeted, overflow, freeSlots } = useMemo(() => {
+    if (!region) return { budgeted: [] as VenuePin[], overflow: [] as VenuePin[], freeSlots: 0 };
     const visible = venuePins.filter((v) => !sponsoredIds.has(v.id) && inRegion(v.lat, v.lon, region));
     const scored = [...visible].sort((a, b) => pinScore(b) - pinScore(a) || a.id.localeCompare(b.id));
     const sponsoredVisible = sponsoredPins.filter((s) => inRegion(s.pin.lat, s.pin.lon, region)).length;
     const slots = Math.max(0, PIN_BUDGET - sponsoredVisible);
-    return { budgeted: scored.slice(0, slots), overflow: scored.slice(slots) };
+    return {
+      budgeted: scored.slice(0, slots),
+      overflow: scored.slice(slots),
+      freeSlots: Math.max(0, slots - scored.length),
+    };
   }, [venuePins, sponsoredPins, sponsoredIds, region]);
+
+  // Stage 2: hollow pins take only the slots photo and sponsored pins leave,
+  // never a place already on the map as a photo pin. Places Phixr already
+  // has photos of (that just don't match this search) go first.
+  const hollowPins = useMemo(() => {
+    if (!region || region.latitudeDelta >= STREET_ZOOM_DELTA) return [];
+    const onMap = new Set([...venuePins.map((v) => v.id), ...sponsoredIds]);
+    return suggestions
+      .filter((s) => !(s.venue_id && onMap.has(s.venue_id)) && inRegion(s.lat, s.lon, region))
+      .map((s, i) => ({ s, i }))
+      .sort((a, b) => b.s.post_count - a.s.post_count || a.i - b.i)
+      .slice(0, Math.min(MAX_SUGGESTED, freeSlots))
+      .map(({ s }) => s);
+  }, [suggestions, venuePins, sponsoredIds, region, freeSlots]);
+
+  const openSuggestion = (place: PlaceSuggestion) => {
+    setSelected({ kind: 'suggestion', place });
+    setCardPosts(null);
+    setCardBiz(null);
+  };
+
+  const beTheFirst = (place: PlaceSuggestion) => {
+    setPendingPlace({
+      name: place.name,
+      lat: place.lat,
+      lon: place.lon,
+      ref: { provider: place.provider, provider_place_id: place.provider_place_id },
+    });
+    router.push('/camera');
+  };
 
   const clusters = useMemo(
     () => (region ? clusterVenues(budgeted, region) : []),
@@ -280,7 +379,7 @@ export function LocalMap({
       250,
     );
 
-  const directions = (pin: VenuePin) => {
+  const directions = (pin: { lat: number; lon: number; name: string | null }) => {
     const url = Platform.select({
       ios: `http://maps.apple.com/?daddr=${pin.lat},${pin.lon}&q=${encodeURIComponent(pin.name ?? '')}`,
       default: `https://www.google.com/maps/dir/?api=1&destination=${pin.lat},${pin.lon}`,
@@ -295,7 +394,8 @@ export function LocalMap({
       </View>
     );
   }
-  if (venuePins.length === 0 && cellPins.length === 0) {
+  const noPhotoPins = venuePins.length === 0 && cellPins.length === 0;
+  if (noPhotoPins && !region) {
     return (
       <View style={styles.center}>
         <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
@@ -319,6 +419,24 @@ export function LocalMap({
         // pins are the only pins on the map.
         showsPointsOfInterests={(region?.latitudeDelta ?? 1) >= STREET_ZOOM_DELTA}
         toolbarEnabled={false}>
+        {/* Stage 2: real places with no matching photos yet — hollow, grey,
+            and drawn first so photo pins always sit on top. */}
+        {hollowPins.map((s) => (
+          <Marker
+            key={`sg-${s.provider_place_id}`}
+            coordinate={{ latitude: s.lat, longitude: s.lon }}
+            onPress={() => openSuggestion(s)}>
+            <View style={styles.pinCol}>
+              <View style={styles.hollowPin}>
+                <Ionicons name="location-outline" size={11} color={HOLLOW_INK} />
+                <ThemedText type="small" style={styles.hollowText} numberOfLines={1}>
+                  {s.name}
+                </ThemedText>
+              </View>
+              <View style={[styles.pinStem, { backgroundColor: HOLLOW_LINE }]} />
+            </View>
+          </Marker>
+        ))}
         {clusters.map((c, i) =>
           c.venues.length > 1 ? (
             <Marker
@@ -408,8 +526,64 @@ export function LocalMap({
         ))}
       </MapView>
 
+      {noPhotoPins && !selected ? (
+        <View style={[styles.hint, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
+            {region && region.latitudeDelta < STREET_ZOOM_DELTA
+              ? 'No photos match yet — these are places nearby. Be the first to post one.'
+              : 'No photos match yet — zoom in to see places nearby.'}
+          </ThemedText>
+        </View>
+      ) : null}
+
+      {/* Stage 2: a suggested place — "be the first", or its photos when Phixr
+          has some that just don't match this search. */}
+      {selected?.kind === 'suggestion' ? (
+        <View style={[styles.card, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <View style={styles.cardHead}>
+            <View style={styles.cardTitle}>
+              <ThemedText type="subtitle" numberOfLines={1} style={styles.cardName}>
+                {selected.place.name}
+              </ThemedText>
+              {selected.place.address ? (
+                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                  {selected.place.address}
+                </ThemedText>
+              ) : null}
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close place card" hitSlop={8} onPress={() => setSelected(null)}>
+              <Ionicons name="close" size={22} color={theme.textSecondary} />
+            </Pressable>
+          </View>
+          <ThemedText type="small">
+            {selected.place.venue_id && selected.place.post_count > 0
+              ? `${selected.place.post_count} photo${selected.place.post_count === 1 ? '' : 's'} here, none matching this search.`
+              : 'No photos here yet — be the first to post one.'}
+          </ThemedText>
+          <View style={styles.actionRow}>
+            <View style={styles.actionBtn}>
+              {selected.place.venue_id && selected.place.post_count > 0 ? (
+                <Button
+                  title="See photos"
+                  onPress={() =>
+                    router.push(
+                      placeHref({ label: selected.place.name, venueId: selected.place.venue_id, cell: null, isBusiness: false }),
+                    )
+                  }
+                />
+              ) : (
+                <Button title="Post a photo here" onPress={() => beTheFirst(selected.place)} />
+              )}
+            </View>
+            <View style={styles.actionBtn}>
+              <Button title="Directions" variant="secondary" onPress={() => directions(selected.place)} />
+            </View>
+          </View>
+        </View>
+      ) : null}
+
       {/* Place / area card */}
-      {selected ? (
+      {selected && selected.kind !== 'suggestion' ? (
         <View style={[styles.card, { backgroundColor: theme.background, borderColor: theme.border }]}>
           <View style={styles.cardHead}>
             <View style={styles.cardTitle}>
@@ -526,6 +700,9 @@ export function LocalMap({
 
 /** Neutral pin colour for customer-tagged (unclaimed) places. */
 const PIN_DARK = '#2A2A28';
+/** Stage 2 hollow pins: outline and text, quieter than any photo pin. */
+const HOLLOW_LINE = '#8C8984';
+const HOLLOW_INK = '#5F5C57';
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
@@ -576,6 +753,29 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  hollowPin: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: HOLLOW_LINE,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    maxWidth: 150,
+  },
+  hollowText: { color: HOLLOW_INK, fontSize: 12, lineHeight: 15 },
+  hint: {
+    position: 'absolute',
+    top: 10,
+    left: 12,
+    right: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   adChip: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',

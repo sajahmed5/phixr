@@ -240,6 +240,8 @@ export type CreatePostInput = {
   /** Display name of the picked place ("Camden Market"); shown on the post (#61/#65).
    *  Stored only when attachLocation is on, like the cell. */
   locationLabel?: string | null;
+  /** The picked place's provider identity; links the post to that venue. */
+  placeRef?: { provider: string; provider_place_id: string } | null;
   // Tags the user confirmed, split by provenance. Names are raw; resolved here.
   tags: { name: string; source: 'user' | 'vision' | 'geo' }[];
   /** Video overlays (normalised); stored as jsonb and drawn at playback. */
@@ -325,6 +327,24 @@ export async function createPost(input: CreatePostInput): Promise<string> {
   if (rows.length) {
     const { error: tagErr } = await supabase.from('post_tags').insert(rows);
     if (tagErr && !alreadyDone(tagErr)) throw tagErr;
+  }
+
+  // Link the post to the picked place's venue (find-or-create, server-side from
+  // authoritative place details) so it shows on the Local map as that place.
+  // Best-effort: the post has landed either way, with its label and cell.
+  if (input.attachLocation && input.placeRef?.provider_place_id) {
+    try {
+      await supabase.functions.invoke('places', {
+        body: {
+          action: 'attach',
+          postId,
+          provider: input.placeRef.provider,
+          provider_place_id: input.placeRef.provider_place_id,
+        },
+      });
+    } catch {
+      // the label and coarse cell still show where it was
+    }
   }
   return postId;
 }

@@ -14,6 +14,7 @@ import { useAuth } from '@/lib/auth-context';
 import { dismissCameraCoach } from '@/lib/coach-marks';
 import { isOnline, isPermanentServerError } from '@/lib/connectivity';
 import { useOutbox } from '@/lib/outbox-provider';
+import { takePendingPlace, type PlaceRef } from '@/lib/pending-place';
 import {
   createPost,
   UploadFailed,
@@ -38,6 +39,9 @@ export type Draft = {
   locationCell: string | null;
   /** Human-readable place, for the compose UI only (never stored). */
   locationLabel: string | null;
+  /** The picked place's provider identity — the post is linked to that venue
+   *  once it lands, so it shows on the map as the place (Stage 2). */
+  placeRef?: PlaceRef | null;
   tags: { name: string; source: 'user' | 'vision' | 'geo' }[];
   /** Paid-partnership brand handle (Part 9A). Declared right after the post
    *  lands; the label is then permanent for the post's lifetime. */
@@ -150,6 +154,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
         attachLocation: c.draft.attachLocation,
         locationCell: c.draft.locationCell,
         locationLabel: c.draft.locationLabel,
+        placeRef: c.draft.placeRef,
         tags: c.draft.tags,
         overlays: c.overlays,
       });
@@ -278,8 +283,11 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
           attachLocation: false,
           locationCell: null,
           locationLabel: null,
+          placeRef: null,
           tags: [],
           partnerBrand: null,
+          // "Be the first" from the Local map starts the post at that place.
+          ...takePendingPlace(),
         },
         submitRequested: false,
         posting: false,

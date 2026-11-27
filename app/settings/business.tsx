@@ -111,6 +111,7 @@ export default function BusinessSettingsScreen() {
   const claim = async (p: NearbyPlace) => {
     try {
       await claimPlace({
+        provider: p.provider ?? undefined,
         provider_place_id: p.provider_place_id!,
         name: p.name,
         category: p.category,
