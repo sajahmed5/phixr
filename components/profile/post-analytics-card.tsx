@@ -77,7 +77,14 @@ function Metric({ label, value }: { label: string; value: number }) {
   return (
     <View style={styles.metric}>
       <ThemedText type="subtitle">{Number(value).toLocaleString()}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
+      {/* #41: five columns leave "Comments" no room on narrow screens and it wrapped
+          to "Comment"/"s" — shrink the type a notch instead of wrapping. */}
+      <ThemedText
+        type="small"
+        themeColor="textSecondary"
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}>
         {label}
       </ThemedText>
     </View>
