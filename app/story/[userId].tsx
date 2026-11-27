@@ -28,6 +28,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ActionMenu } from '@/components/ui/action-menu';
 import { useTheme } from '@/hooks/use-theme';
 import { confirm } from '@/lib/confirm';
+import { mediaSource, prefetchImage } from '@/lib/media';
 import { blockUser, reportUser } from '@/lib/profile';
 import { formatRelative } from '@/lib/relative-time';
 import {
@@ -128,13 +129,21 @@ export default function StoryViewerScreen() {
     });
   }, [prevAccount]);
 
-  // ---- drive the segment: progress bar + auto-advance + mark viewed + prefetch ----
+  // ---- mark viewed: once per story, and only when there's something to record ----
+  // (This used to live in the progress effect below, whose deps include `paused` —
+  // every hold-to-pause and release re-sent the RPC, and it fired for stories already
+  // viewed and for your own.)
+  useEffect(() => {
+    if (!story || loading || story.viewed || story.is_self) return;
+    void markStoryViewed(story.id);
+  }, [story, loading]);
+
+  // ---- drive the segment: progress bar + auto-advance + prefetch ----
   useEffect(() => {
     if (!story || loading) return;
-    void markStoryViewed(story.id);
     // prefetch the next segment's media so it doesn't stall
     const nextStory = stories[seg + 1];
-    if (nextStory?.media_type === 'image') void Image.prefetch(nextStory.media_url);
+    if (nextStory?.media_type === 'image') void prefetchImage(nextStory.media_url);
 
     progress.value = 0;
     if (story.media_type === 'image') {
@@ -245,7 +254,7 @@ export default function StoryViewerScreen() {
             />
           ) : (
             <Image
-              source={{ uri: story.media_url }}
+              source={mediaSource(story.media_url)}
               style={StyleSheet.absoluteFill}
               contentFit="contain"
               transition={120}

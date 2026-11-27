@@ -1,10 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { track, trackFirst } from '@/lib/analytics';
 import { useAuth } from '@/lib/auth-context';
-import { isOnline, onConnectivityChange } from '@/lib/connectivity';
+import { isOnline, isUnmeteredConnection, onConnectivityChange } from '@/lib/connectivity';
 import { haptics } from '@/lib/haptics';
 import {
   arrangeAdPlacement,
@@ -15,7 +14,7 @@ import {
 } from '@/lib/deck';
 import { registerSwitchFlusher } from '@/lib/accounts';
 import { getClientSettings } from '@/lib/settings';
-import { resignDeckMedia, resolveDeckMedia } from '@/lib/media';
+import { prefetchImage, resignDeckMedia, resolveDeckMedia } from '@/lib/media';
 import { attachPartnershipLabels } from '@/lib/partnerships';
 import { SwipeQueue } from '@/lib/swipe-queue';
 import { prefetchVideo } from '@/lib/video-cache';
@@ -27,8 +26,11 @@ export type DeckStatus = 'loading' | 'ready' | 'exhausted' | 'error' | 'offline'
 // Start fetching the next batch once the buffer drops to ~card 5 of the current 20.
 const REFILL_AT = DECK_BATCH_SIZE - 5;
 // Warm the next ~15 cards' media so swiping stays smooth (image bytes are already
-// in expo-image's cache by the time the card reaches the top).
+// in expo-image's cache by the time the card reaches the top). On metered connections
+// stay shallow: full-bleed images are a few hundred KB each, and a user who leaves
+// after a couple of cards shouldn't have paid for a dozen more.
 const PREFETCH_AHEAD = 15;
+const PREFETCH_AHEAD_METERED = 5;
 // On Wi-Fi, also download the next few videos so they play instantly — and still play if
 // the signal drops. Never on mobile data (see lib/video-cache).
 const VIDEO_PREFETCH_AHEAD = 3;
@@ -87,9 +89,6 @@ export function useDeck(fetchBatch: FetchBatch, options: UseDeckOptions = {}): U
   }, []);
   const [pendingWrites, setPendingWrites] = useState(0);
 
-  // All post ids ever loaded this session — passed as the deck's exclude list so the
-  // server never re-serves a card already in (or already gone from) the buffer.
-  const loadedIds = useRef<Set<string>>(new Set());
   const fetchingMore = useRef(false);
   const queueRef = useRef<SwipeQueue | null>(null);
   const viewQueueRef = useRef<ViewEventQueue | null>(null);
@@ -109,13 +108,17 @@ export function useDeck(fetchBatch: FetchBatch, options: UseDeckOptions = {}): U
   }, [status]);
 
   const prefetchMedia = useCallback((list: DeckCard[]) => {
-    for (const card of list.slice(0, PREFETCH_AHEAD)) {
+    const ahead = isUnmeteredConnection() ? PREFETCH_AHEAD : PREFETCH_AHEAD_METERED;
+    for (const card of list.slice(0, ahead)) {
       // Images: warm the full-bleed image. Videos: warm the poster thumbnail.
+      // prefetchImage caches under the stable bucket path and skips keys already on disk.
       const url = card.media_type === 'image' ? card.media_url : card.thumbnail_url;
-      if (url) void Image.prefetch(url).catch(() => false);
+      if (url) void prefetchImage(url);
     }
-    // Wi-Fi only (checked inside): the next few videos themselves.
-    for (const card of list.slice(0, VIDEO_PREFETCH_AHEAD)) {
+    // Wi-Fi only (checked inside): the next few videos themselves. Starts at index 1 —
+    // the top card is already mounted and streaming, so downloading it in parallel
+    // just fetched the same clip twice.
+    for (const card of list.slice(1, 1 + VIDEO_PREFETCH_AHEAD)) {
       if (card.media_type === 'video') prefetchVideo(card.media_url);
     }
   }, []);
@@ -141,12 +144,10 @@ export function useDeck(fetchBatch: FetchBatch, options: UseDeckOptions = {}): U
   const loadInitial = useCallback(async () => {
     if (!uid) return;
     setStatus('loading');
-    loadedIds.current = new Set();
     try {
       const batch = arrangeAdPlacement(
         await attachPartnershipLabels(await resolveDeckMedia(await fetchBatch([]))),
       );
-      batch.forEach((c) => loadedIds.current.add(c.id));
       needsResign.current = false;
       setCards(batch);
       setUndoStack([]);
@@ -158,7 +159,6 @@ export function useDeck(fetchBatch: FetchBatch, options: UseDeckOptions = {}): U
       // swipes on them queue up and sync later like any other.
       const saved = savedKey ? await readSavedDeck(savedKey) : null;
       if (saved && saved.cards.length > 0) {
-        saved.cards.forEach((c) => loadedIds.current.add(c.id));
         needsResign.current = true;
         setCards(saved.cards);
         setUndoStack([]);
@@ -174,21 +174,31 @@ export function useDeck(fetchBatch: FetchBatch, options: UseDeckOptions = {}): U
     if (fetchingMore.current) return;
     fetchingMore.current = true;
     try {
-      const batch = await fetchBatch([...loadedIds.current]);
+      // Exclude only what the server can't know about: cards still in the buffer or
+      // undo stack, and swipes that haven't synced yet. (Synced swipes are already
+      // excluded server-side — sending every id ever loaded grew this request without
+      // bound over a long session.)
+      const exclude = new Set<string>([
+        ...cardsRef.current.map((c) => c.id),
+        ...undoStackRef.current.map((c) => c.id),
+        ...(queueRef.current?.pendingSwipePostIds ?? []),
+      ]);
+      const batch = await fetchBatch([...exclude]);
       const fresh = await attachPartnershipLabels(
-        await resolveDeckMedia(batch.filter((c) => !loadedIds.current.has(c.id))),
+        await resolveDeckMedia(batch.filter((c) => !exclude.has(c.id))),
       );
-      fresh.forEach((c) => loadedIds.current.add(c.id));
       // Aggregate count only — never which cards, never who they're for.
       track('batch_refetch', { size: fresh.length });
       if (fresh.length) {
         setCards((prev) => {
           // Part 13D: place the batch's ad away from sensitive/blocked cards,
           // checking the boundary against the last card already dealt.
-          const placed = arrangeAdPlacement(fresh, prev[prev.length - 1] ?? null);
+          const have = new Set(prev.map((c) => c.id));
+          const placed = arrangeAdPlacement(fresh.filter((c) => !have.has(c.id)), prev[prev.length - 1] ?? null);
           const next = [...prev, ...placed];
-          // Warm the freshly-arrived batch's media (not just when the deck was empty).
-          prefetchMedia(placed);
+          // Warm from the head of the MERGED buffer — the new batch lands ~15 cards
+          // deep, so prefetching it directly downloaded media far from being seen.
+          prefetchMedia(next);
           return next;
         });
       }

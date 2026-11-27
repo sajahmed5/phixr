@@ -31,7 +31,10 @@ export function userClient(jwt: string): SupabaseClient {
 export async function putObject(
   svc: SupabaseClient, bucket: string, path: string, bytes: Uint8Array, contentType: string,
 ): Promise<void> {
-  const { error } = await svc.storage.from(bucket).upload(path, bytes, { contentType, upsert: true });
+  // Serving keys are unique per upload and never rewritten in place, so they can be
+  // cached for a year (the default is 1 hour). Staging objects are transient — leave them.
+  const cacheControl = bucket === SERVING_BUCKET ? '31536000' : undefined;
+  const { error } = await svc.storage.from(bucket).upload(path, bytes, { contentType, upsert: true, cacheControl });
   if (error) throw new Error(`storage upload ${bucket}/${path}: ${error.message}`);
 }
 

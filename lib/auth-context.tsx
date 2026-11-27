@@ -160,7 +160,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // verification is NOT required — an unverified session still gets a profile and
   // enters the app (RLS scopes everything to auth.uid() regardless).
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Re-resolve when the USER changes (sign-in, switch, email verified, metadata update) —
+  // not on every TOKEN_REFRESHED, which hands back a new session object for the same
+  // user roughly hourly and re-ran get_my_profile + record_device_presence each time.
+  // Declared before the profile effect so it runs first on the same commit.
+  const sessionRef = useRef(session);
   useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+  const userKey = session
+    ? `${session.user.id}|${session.user.email_confirmed_at ?? ''}|${session.user.updated_at ?? ''}`
+    : null;
+  useEffect(() => {
+    const session = sessionRef.current;
     if (retryTimer.current) {
       clearTimeout(retryTimer.current);
       retryTimer.current = null;
@@ -168,7 +180,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!userId || !session) {
       // Reset profile when the signed-in user goes away; status is signedOut here
       // regardless, so this only clears stale data — not a derived-state loop.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setProfile(null);
       return;
     }
@@ -202,7 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [userId, session, reloadNonce]);
+  }, [userId, userKey, reloadNonce]);
 
   const reload = useCallback(() => setReloadNonce((n) => n + 1), []);
 

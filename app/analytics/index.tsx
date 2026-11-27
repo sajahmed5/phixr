@@ -14,7 +14,7 @@ import { useAuth } from '@/lib/auth-context';
 import { cancelBoost, getMyBoosts, type MyBoost } from '@/lib/boosts';
 import { getBusinessInsights, type BusinessInsights } from '@/lib/business';
 import { confirm } from '@/lib/confirm';
-import { signMediaPaths } from '@/lib/media';
+import { mediaSource, signMediaPaths } from '@/lib/media';
 import {
   getAccountAnalytics,
   getCreatorOverview,
@@ -383,7 +383,7 @@ function OverviewPostRow({
       onPress={onPress}
       style={[styles.postRow, { borderColor: theme.border }]}>
       {thumb ? (
-        <Image source={{ uri: thumb }} style={styles.postThumb} contentFit="cover" />
+        <Image source={mediaSource(thumb)} style={styles.postThumb} contentFit="cover" />
       ) : (
         <View style={[styles.postThumb, { backgroundColor: theme.backgroundSelected }]} />
       )}

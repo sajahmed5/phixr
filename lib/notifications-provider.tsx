@@ -77,7 +77,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     if (user?.id) void setAccountUnread(user.id, n).catch(() => {});
   }, [user?.id]);
 
+  const unreadRef = useRef(0);
+  useEffect(() => {
+    unreadRef.current = unread;
+  }, [unread]);
   const clearAll = useCallback(async () => {
+    // Nothing unread → nothing to mark and no badge to refresh; skip both round trips.
+    if (unreadRef.current === 0) return;
     await markRead();
     await refreshUnread();
   }, [refreshUnread]);

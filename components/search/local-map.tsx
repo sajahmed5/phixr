@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { getVenueBusiness, recordBusinessInsight, type VenueBusiness } from '@/lib/business';
-import { signMediaPaths } from '@/lib/media';
+import { mediaSource, signMediaPaths } from '@/lib/media';
 import { getMapVenues, getVenuePosts, type MapVenue, type VenuePost } from '@/lib/search';
 
 /**
@@ -234,7 +234,7 @@ export function LocalMap() {
             <View style={styles.thumbRow}>
               {cardPosts.map((p) => (
                 <Pressable key={p.id} onPress={() => router.push(`/post/${p.id}`)} style={styles.thumbWrap}>
-                  <Image source={{ uri: p.signed }} style={styles.thumb} contentFit="cover" />
+                  <Image source={mediaSource(p.signed)} style={styles.thumb} contentFit="cover" />
                 </Pressable>
               ))}
             </View>

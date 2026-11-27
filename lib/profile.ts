@@ -81,6 +81,34 @@ export async function getProfilePosts(userId: string): Promise<GridPost[]> {
 }
 
 /**
+ * Grid-order post ids only, for sibling navigation from the post viewer. The full
+ * getProfilePosts signs every thumbnail and counts carousels — hundreds of rows plus a
+ * signing round-trip, all discarded when the caller only steps between ids.
+ */
+export async function getProfilePostIds(userId: string): Promise<string[]> {
+  const { collabPostIds } = await import('@/lib/showcase');
+  const collabIds = await collabPostIds(userId).catch(() => [] as string[]);
+  const sel = 'id, pinned_at, created_at';
+  const own = supabase.from('posts').select(sel).eq('user_id', userId).neq('moderation_status', 'removed');
+  const collab = collabIds.length
+    ? supabase.from('posts').select(sel).in('id', collabIds).neq('moderation_status', 'removed')
+    : Promise.resolve({ data: [], error: null } as never);
+  const [a, b] = await Promise.all([own, collab]);
+  if (a.error) throw a.error;
+  type Row = { id: string; pinned_at: string | null; created_at: string };
+  const seen = new Set<string>();
+  return ([...(a.data ?? []), ...((b as { data: Row[] }).data ?? [])] as Row[])
+    .filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)))
+    .sort((x, y) => {
+      // Same order as getProfilePosts: pinned first, then newest.
+      if (!!x.pinned_at !== !!y.pinned_at) return x.pinned_at ? -1 : 1;
+      if (x.pinned_at && y.pinned_at) return x.pinned_at < y.pinned_at ? 1 : -1;
+      return x.created_at < y.created_at ? 1 : -1;
+    })
+    .map((r) => r.id);
+}
+
+/**
  * Media count per post (1 = single, >1 = carousel) for the grid's stacked badge.
  * Never throws — a failure just means no badge.
  */

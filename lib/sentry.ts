@@ -45,6 +45,10 @@ export function initSentry(dsnOverride?: string): boolean {
     sendDefaultPii: false, // never let Sentry attach IP / cookies / user data itself
     attachStacktrace: true,
     tracesSampleRate: 0.2,
+    // The native default propagates to every URL (/.*/): sentry-trace + baggage headers
+    // went on every request, including media and third-party analytics. Only our own
+    // backend can use them.
+    tracePropagationTargets: extra.supabaseUrl ? [extra.supabaseUrl] : [],
     // No session replay / no profiling: both can capture screen content (photos, handles).
     beforeSend: scrubEvent,
     beforeBreadcrumb: scrubBreadcrumb,

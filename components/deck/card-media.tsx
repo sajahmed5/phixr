@@ -3,14 +3,16 @@
    returns" heuristic doesn't model it. */
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { useIsFocused } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 
 import { VideoOverlays } from '@/components/video-overlays';
 import { parseVideoOverlays } from '@/lib/video-overlays';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { AppState, Pressable, StyleSheet, View } from 'react-native';
 
 import type { DeckCard } from '@/lib/deck';
+import { mediaSource } from '@/lib/media';
 import { getMuted, setMutedPreference, subscribeMute } from '@/lib/mute-preference';
 import { cachedVideoUri } from '@/lib/video-cache';
 import { reportVideoCompleted, reportVideoPosition } from '@/lib/video-progress';
@@ -28,7 +30,7 @@ export function CardMedia({ card, isActive }: { card: DeckCard; isActive: boolea
 function CardImage({ card }: { card: DeckCard }) {
   return (
     <Image
-      source={{ uri: card.media_url }}
+      source={mediaSource(card.media_url)}
       style={StyleSheet.absoluteFill}
       contentFit="cover"
       transition={180}
@@ -47,10 +49,18 @@ function CardVideo({ card, isActive }: { card: DeckCard; isActive: boolean }) {
   // across sessions rather than resetting per card.
   const [muted, setMuted] = useState(getMuted());
 
-  // Plays the copy downloaded ahead on Wi-Fi when there is one (instant start, works with
-  // no signal); otherwise streams as before.
-  const source = useMemo(() => cachedVideoUri(card.media_url), [card.media_url]);
-  const player = useVideoPlayer(source, (p) => {
+  // Pause while another screen covers the deck (profile, comments, tag page…) — the
+  // top card otherwise kept looping, and an uncached loop keeps streaming.
+  const focused = useIsFocused();
+  const shouldPlay = isActive && focused;
+
+  // The player starts EMPTY and loads its source the first time this card is the top
+  // card. The card underneath used to mount with the remote URL and buffer while paused —
+  // streaming a clip that was often also being prefetched (the same bytes twice), or that
+  // a left-swipe discarded unwatched. cachedVideoUri resolves at activation, so a Wi-Fi
+  // pre-download that finished in the meantime plays from disk (instant, offline-safe).
+  const loaded = useRef(false);
+  const player = useVideoPlayer(null, (p) => {
     p.loop = true;
     p.muted = getMuted();
     p.timeUpdateEventInterval = 1;
@@ -64,25 +74,36 @@ function CardVideo({ card, isActive }: { card: DeckCard; isActive: boolean }) {
 
   // Only the focused card plays; muting honours the global preference (no forced re-mute).
   useEffect(() => {
-    if (isActive) {
+    if (shouldPlay && !loaded.current) {
+      loaded.current = true;
+      player
+        .replaceAsync(cachedVideoUri(card.media_url))
+        .then(() => {
+          player.muted = getMuted();
+          player.play();
+        })
+        .catch(() => {
+          loaded.current = false; // retry on the next activation
+        });
+    } else if (shouldPlay) {
       player.muted = getMuted();
       player.play();
     } else {
       player.pause();
     }
-  }, [isActive, player]);
+  }, [shouldPlay, player, card.media_url]);
 
   // Pause when the app backgrounds; resume on return if this card is still focused.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => {
       if (s === 'active') {
-        if (isActive) player.play();
+        if (shouldPlay) player.play();
       } else {
         player.pause();
       }
     });
     return () => sub.remove();
-  }, [isActive, player]);
+  }, [shouldPlay, player]);
 
   // Enforce the 60s cap: loop back to the start once a clip passes the cap.
   // The same tick feeds watch-time tracking (Part 1B): the view-event recorder
@@ -113,7 +134,7 @@ function CardVideo({ card, isActive }: { card: DeckCard; isActive: boolean }) {
     <View style={StyleSheet.absoluteFill}>
       {/* Poster frame under the video so there's no black flash before it loads. */}
       <Image
-        source={{ uri: card.thumbnail_url }}
+        source={mediaSource(card.thumbnail_url)}
         style={StyleSheet.absoluteFill}
         contentFit="cover"
         recyclingKey={card.id}

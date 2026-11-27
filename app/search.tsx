@@ -21,7 +21,7 @@ import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
 import { notify } from '@/lib/confirm';
 import { fetchDiscover, type DeckCard } from '@/lib/deck';
-import { resolveDeckMedia } from '@/lib/media';
+import { mediaSource, resolveThumbMedia } from '@/lib/media';
 import {
   ACCOUNTS_PAGE,
   PAGE,
@@ -802,7 +802,7 @@ function PostsGrid({
       }
       renderItem={({ item, index }) => (
         <Pressable onPress={() => onOpen(index)} style={{ width: cell, height: cell, padding: 1 }}>
-          <Image source={{ uri: item.thumbnail_url }} style={styles.gridImg} contentFit="cover" recyclingKey={item.id} />
+          <Image source={mediaSource(item.thumbnail_url)} style={styles.gridImg} contentFit="cover" recyclingKey={item.id} />
           {item.media_type === 'video' ? (
             <View style={styles.playBadge}>
               <Ionicons name="play" size={12} color="#fff" />
@@ -919,7 +919,8 @@ function DiscoverGrid({ bottomInset }: { bottomInset: number }) {
     let active = true;
     (async () => {
       try {
-        const batch = await resolveDeckMedia(await fetchDiscover(30));
+        // Thumbnail-only: the discover grid never renders full-bleed media or carousels.
+        const batch = await resolveThumbMedia(await fetchDiscover(30));
         if (active) setItems(batch);
       } catch {
         if (active) setItems([]);
@@ -958,7 +959,7 @@ function DiscoverGrid({ bottomInset }: { bottomInset: number }) {
       }
       renderItem={({ item }) => (
         <Pressable onPress={() => router.push(`/post/${item.id}`)} style={{ width: cell, height: cell, padding: 1 }}>
-          <Image source={{ uri: item.thumbnail_url }} style={styles.gridImg} contentFit="cover" recyclingKey={item.id} />
+          <Image source={mediaSource(item.thumbnail_url)} style={styles.gridImg} contentFit="cover" recyclingKey={item.id} />
           {item.media_type === 'video' ? (
             <View style={styles.playBadge}>
               <Ionicons name="play" size={12} color="#fff" />

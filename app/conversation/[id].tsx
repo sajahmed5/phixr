@@ -24,6 +24,7 @@ import { useKeyboardHeight } from '@/lib/use-keyboard-height';
 import { useAuth } from '@/lib/auth-context';
 import { confirm } from '@/lib/confirm';
 import { useOnline } from '@/lib/connectivity';
+import { mediaSource } from '@/lib/media';
 import { loadThread, saveThread } from '@/lib/message-cache';
 import { useOutbox } from '@/lib/outbox-provider';
 import { blockUser } from '@/lib/profile';
@@ -121,7 +122,6 @@ export default function ConversationScreen() {
       setHasOlder(msgs.length === PAGE);
       if (meId) void saveThread(meId, acting ? `${cid}:${asBusiness}` : cid, d, msgs);
       if (!acting) void markRead(cid); // team members aren't conversation members
-      void refreshReactions();
     } catch {
       // No signal: show the last copy we saw. New messages can still be written — they
       // wait in the outbox and send when the connection is back.
@@ -132,7 +132,37 @@ export default function ConversationScreen() {
         setMessages((prev) => (prev.length ? prev : cached.messages));
       }
     }
-  }, [cid, acting, asBusiness, meId, refreshReactions]);
+  }, [cid, acting, asBusiness, meId]);
+
+  // Mirror `messages` into a ref so the realtime merge below stays referentially stable
+  // (a dep on `messages` would re-subscribe the channel on every message).
+  const messagesRef = useRef<Message[]>([]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // A realtime message event pulls only the newest few rows and merges them in. The old
+  // handler refetched the whole screen (conversation detail + 30 messages, re-signing all
+  // their media + every reaction in the conversation) on EVERY message — ~6 requests per
+  // incoming message, more in groups where each markRead rippled to every open client.
+  const mergeNewest = useCallback(async () => {
+    if (!cid) return;
+    try {
+      const newest = await getMessages(cid, 8);
+      const known = new Set(messagesRef.current.map((m) => m.id));
+      const fresh = newest.filter((m) => !known.has(m.id));
+      const byId = new Map(newest.map((m) => [m.id, m]));
+      setMessages((prev) => {
+        const seen = new Set(prev.map((m) => m.id));
+        return [...newest.filter((m) => !seen.has(m.id)), ...prev.map((m) => byId.get(m.id) ?? m)];
+      });
+      // Move my read cursor only for someone ELSE's message — marking on own sends
+      // just triggered member-change events for everyone with the chat open.
+      if (!acting && fresh.some((m) => m.sender_id !== meId)) void markRead(cid);
+    } catch {
+      // Best-effort; the next full refresh (reopen/reconnect) reconciles.
+    }
+  }, [cid, acting, meId]);
 
   // React to a message (double-tap → 💯, or the reaction row). Toggles off if I tap the
   // same emoji again. Optimistic; realtime + refetch reconcile.
@@ -162,9 +192,16 @@ export default function ConversationScreen() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mount loader for this thread
     setLoading(true);
     void refresh().finally(() => alive && setLoading(false));
+    void refreshReactions(); // once on open; reaction events keep it fresh after that
+    // Read-receipt updates arrive once per member per message — collapse the burst into
+    // one get_conversation call instead of one per member.
+    let memberTimer: ReturnType<typeof setTimeout> | null = null;
     const sub = subscribeToThread(cid, {
-      onMessage: () => void refresh(),
-      onMemberChange: () => void getConversation(cid).then((d) => alive && setDetail(d)),
+      onMessage: () => void mergeNewest(),
+      onMemberChange: () => {
+        if (memberTimer) clearTimeout(memberTimer);
+        memberTimer = setTimeout(() => void getConversation(cid).then((d) => alive && setDetail(d)), 1500);
+      },
       onTyping: ({ userId, handle }) => {
         if (userId === meId) return;
         setTypingName(handle);
@@ -179,8 +216,9 @@ export default function ConversationScreen() {
       sub.unsubscribe();
       unsubReacts();
       if (typingTimer.current) clearTimeout(typingTimer.current);
+      if (memberTimer) clearTimeout(memberTimer);
     };
-  }, [cid, refresh, refreshReactions, meId]);
+  }, [cid, refresh, mergeNewest, refreshReactions, meId]);
 
   const loadOlder = useCallback(async () => {
     if (loadingOlder || !hasOlder || messages.length === 0) return;
@@ -252,9 +290,9 @@ export default function ConversationScreen() {
     .join(',');
   useEffect(() => {
     if (!sentKey) return;
-    const t = setTimeout(() => void refresh(), 0);
+    const t = setTimeout(() => void mergeNewest(), 0);
     return () => clearTimeout(t);
-  }, [sentKey, refresh]);
+  }, [sentKey, mergeNewest]);
 
   const onPendingPress = useCallback(
     (p: Pending) => {
@@ -578,7 +616,7 @@ function MessageBubble({
               ) : null}
               {!isPending && item.shared_post_id ? (
                 <Pressable onPress={() => onOpenPost(item.shared_post_id!)} style={[styles.sharedCard, { borderColor: theme.border }]}>
-                  {item.shared_thumb ? <Image source={{ uri: item.shared_thumb }} style={styles.sharedThumb} contentFit="cover" /> : null}
+                  {item.shared_thumb ? <Image source={mediaSource(item.shared_thumb)} style={styles.sharedThumb} contentFit="cover" /> : null}
                   <View style={{ flex: 1, padding: 8 }}>
                     <ThemedText type="small" style={{ color: textColor, fontWeight: '700' }} numberOfLines={1}>@{item.shared_handle}</ThemedText>
                     <ThemedText type="small" style={{ color: textColor }} numberOfLines={2}>{item.shared_caption ?? 'Shared a post'}</ThemedText>
@@ -586,7 +624,7 @@ function MessageBubble({
                 </Pressable>
               ) : null}
               {isPending && item.mediaUri ? <Image source={{ uri: item.mediaUri }} style={styles.msgImage} contentFit="cover" /> : null}
-              {!isPending && item.media_url ? <Image source={{ uri: item.media_url }} style={styles.msgImage} contentFit="cover" /> : null}
+              {!isPending && item.media_url ? <Image source={mediaSource(item.media_url)} style={styles.msgImage} contentFit="cover" /> : null}
               {item.body ? <ThemedText type="default" style={{ color: textColor }}>{item.body}</ThemedText> : null}
             </>
           )}

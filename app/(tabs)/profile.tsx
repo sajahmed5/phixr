@@ -24,6 +24,7 @@ import { isBusinessProfile } from '@/lib/account-type';
 import { useAuth } from '@/lib/auth-context';
 import { getBookmarks, getCollections, type Collection, type SavedPost } from '@/lib/bookmarks';
 import { getMySwipeCounts, getMySwipes, undoSwipe, type SwipedPost } from '@/lib/deck';
+import { mediaSource } from '@/lib/media';
 import {
   getPendingRequestCount,
   getProfileOverview,
@@ -316,7 +317,7 @@ export default function ProfileScreen() {
             style={{ width: size, height: size }}
             accessibilityRole="button"
             accessibilityLabel="Open post">
-            <Image source={{ uri: item.thumbnail_url }} style={styles.thumb} contentFit="cover" recyclingKey={item.id} />
+            <Image source={mediaSource(item.thumbnail_url)} style={styles.thumb} contentFit="cover" recyclingKey={item.id} />
             {item.media_type === 'video' ? (
               <View style={[styles.badge, styles.vidBadge]}>
                 <Ionicons name="videocam" size={12} color="#fff" />

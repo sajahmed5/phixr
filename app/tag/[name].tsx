@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { mediaSource } from '@/lib/media';
 import { supabase } from '@/lib/supabase';
 import { PAGE, getTagMeta, searchPostsByTag, type SearchPost, type TagMeta } from '@/lib/search';
 
@@ -108,7 +109,7 @@ export default function TagPage() {
           <Pressable
             onPress={() => router.push({ pathname: '/deck', params: { tag: name, start: String(index) } })}
             style={{ width: cell, height: cell, padding: 1 }}>
-            <Image source={{ uri: item.thumbnail_url }} style={styles.gridImg} contentFit="cover" recyclingKey={item.id} />
+            <Image source={mediaSource(item.thumbnail_url)} style={styles.gridImg} contentFit="cover" recyclingKey={item.id} />
             {item.media_type === 'video' ? (
               <View style={styles.playBadge}>
                 <Ionicons name="play" size={12} color="#fff" />
