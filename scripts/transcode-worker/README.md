@@ -36,6 +36,12 @@ supabase secrets set TRANSCODER_URL=<cloud-run-url> TRANSCODER_SECRET=<same rand
 ```
 
 `--memory 2Gi --cpu 2` comfortably transcodes a 60 s clip; scale as needed.
+
+Optional env: `MAX_VIDEO_EDGE` (default 1080 — the short edge, i.e. 1080p),
+`MAX_VIDEO_FPS` (default 30 — higher frame rates are reduced, lower ones kept;
+raise it when the storage budget allows), `MAX_VIDEO_SECONDS` (default 60).
+Change one without a rebuild: `gcloud run services update fame-transcoder
+--region europe-west2 --update-env-vars MAX_VIDEO_FPS=60`.
 Cloud Run scales to zero, so idle cost is nil. Keep the service-role key and
 secret out of source — they're Cloud Run env + Supabase secrets only.
 
@@ -72,7 +78,7 @@ moderation.
 ```bash
 # H.264 MP4, hard 60s cut, strip ALL metadata, downscale to 1080p (short edge 1080)
 ffmpeg -y -i in.mov -t 60 -map_metadata -1 \
-  -vf "scale='if(gt(iw,ih),-2,min(1080,iw))':'if(gt(iw,ih),min(1080,ih),-2)'" -c:v libx264 -preset veryfast -crf 23 \
+  -vf "scale='if(gt(iw,ih),-2,min(1080,iw))':'if(gt(iw,ih),min(1080,ih),-2)'" -fpsmax 30 -c:v libx264 -preset veryfast -crf 23 \
   -movflags +faststart -c:a aac -b:a 128k out.mp4
 
 # Poster frame
