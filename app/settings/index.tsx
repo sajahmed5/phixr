@@ -50,7 +50,7 @@ const RADII = [1, 5, 10, 25, 50];
 export default function SettingsScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { profile, reload, signOut, signOutAll } = useAuth();
+  const { profile, reload, signOut, signOutAll, user } = useAuth();
   const isBusiness = isBusinessProfile(profile);
   const reportIssue = useReportIssue();
 
@@ -184,6 +184,22 @@ export default function SettingsScreen() {
     <ThemedView style={styles.fill}>
       <Stack.Screen options={{ headerShown: true, title: 'Settings' }} />
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Login details first: these were buried under Account, and email couldn't be
+            changed at all (reported 27 Nov). */}
+        <Group title="Login details">
+          <LinkRow
+            icon="mail-outline"
+            label="Email"
+            sublabel={user?.new_email ? `${user?.email ?? ''} · change pending` : (user?.email ?? undefined)}
+            onPress={() => router.push('/settings/email')}
+          />
+          <LinkRow
+            icon="key-outline"
+            label="Change password"
+            onPress={() => router.push('/settings/password')}
+          />
+        </Group>
+
         <Group title="Privacy">
           <ToggleRow
             label="Private account"
@@ -401,11 +417,6 @@ export default function SettingsScreen() {
               onPress={() => router.push('/settings/earnings')}
             />
           ) : null}
-          <LinkRow
-            icon="key-outline"
-            label="Change password"
-            onPress={() => router.push('/settings/password')}
-          />
           <LinkRow
             icon="phone-portrait-outline"
             label="Devices & sessions"
@@ -656,12 +667,15 @@ function ToggleRow({
 function LinkRow({
   icon,
   label,
+  sublabel,
   onPress,
   destructive,
   busy,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  /** Secondary line under the label (e.g. the current login email). */
+  sublabel?: string;
   onPress: () => void;
   destructive?: boolean;
   busy?: boolean;
@@ -675,9 +689,20 @@ function LinkRow({
       accessibilityRole="button"
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <Ionicons name={icon} size={20} color={color} />
-      <ThemedText type="default" style={[styles.linkLabel, { color }]}>
-        {label}
-      </ThemedText>
+      {sublabel ? (
+        <View style={styles.linkLabel}>
+          <ThemedText type="default" style={{ color }}>
+            {label}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            {sublabel}
+          </ThemedText>
+        </View>
+      ) : (
+        <ThemedText type="default" style={[styles.linkLabel, { color }]}>
+          {label}
+        </ThemedText>
+      )}
       {busy ? (
         <ActivityIndicator color={theme.textSecondary} />
       ) : (
