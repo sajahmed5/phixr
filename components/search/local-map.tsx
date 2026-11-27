@@ -58,7 +58,9 @@ import {
  * Stage 3: posts tagged to a venue can carry the photo's ~300m square (kept by
  * the server only when it's inside the venue). Zoomed right in, a venue whose
  * photos span several squares — a park — shows a count bubble per area, and
- * tapping one opens the photos from that part.
+ * tapping one opens the photos from that part. Posts with no place tag carry
+ * their ~300m square too (kept only if near the area picked), so area pins
+ * split into squares as you zoom in and merge back as you zoom out.
  */
 
 /** Stage 1 budget: at most this many venue pins in view at once. */
@@ -79,7 +81,30 @@ const MAX_SUGGESTED = 8;
 const SUGGEST_GRID = 0.005;
 
 type VenuePin = MapPin & { lat: number; lon: number };
-type CellPin = MapPin & { centre: { lat: number; lon: number } };
+/** An area pin: a coarse cell, or a ~300m square inside one (Stage 3).
+ *  `excludeFine`: a coarse leftover — only posts without a square. */
+type CellPin = MapPin & { centre: { lat: number; lon: number }; excludeFine?: boolean };
+type AreaCluster = { lat: number; lon: number; points: CellPin[] };
+
+/** Same grid bucketing as clusterVenues, for area pins: zoomed out the
+ *  ~300m squares merge into one count bubble; zoomed in they separate. */
+function clusterAreas(points: CellPin[], region: Region): AreaCluster[] {
+  const cellW = region.longitudeDelta / 9;
+  const cellH = region.latitudeDelta / 9;
+  const buckets = new Map<string, AreaCluster>();
+  for (const p of points) {
+    const key = `${Math.round(p.centre.lon / cellW)}:${Math.round(p.centre.lat / cellH)}`;
+    const b = buckets.get(key);
+    if (b) {
+      b.points.push(p);
+      b.lat = (b.lat * (b.points.length - 1) + p.centre.lat) / b.points.length;
+      b.lon = (b.lon * (b.points.length - 1) + p.centre.lon) / b.points.length;
+    } else {
+      buckets.set(key, { lat: p.centre.lat, lon: p.centre.lon, points: [p] });
+    }
+  }
+  return [...buckets.values()];
+}
 type Selected =
   | { kind: 'venue'; pin: VenuePin }
   | { kind: 'cell'; pin: CellPin }
@@ -292,7 +317,7 @@ export function LocalMap({
     setCardPosts(null);
     setCardBiz(null);
     try {
-      const posts = await getCellPosts(pin.id, query, category);
+      const posts = await getCellPosts(pin.id, query, category, 12, !!pin.excludeFine);
       const signed = await signMediaPaths(posts.map((p) => p.thumbnail_url));
       setCardPosts(posts.map((p) => ({ ...p, signed: signed.get(p.thumbnail_url) ?? p.thumbnail_url })));
     } catch {
@@ -399,7 +424,30 @@ export function LocalMap({
     [overflow, region],
   );
 
-  const zoomInto = (c: Cluster) =>
+  // Stage 3: untagged posts with a ~300m square show at their square; the
+  // rest of each coarse cell stays at its centre as a leftover pin. Grid
+  // clustering then merges nearby ones by zoom.
+  const areaPoints = useMemo(() => {
+    const parts = new Map<string, CellPin[]>();
+    for (const p of pins ?? []) {
+      if (p.kind !== 'cell_part' || !p.cell) continue;
+      const centre = decodeCell(p.cell);
+      if (!centre) continue;
+      parts.set(p.id, [...(parts.get(p.id) ?? []), { ...p, id: p.cell, centre }]);
+    }
+    return cellPins.flatMap((c) => {
+      const ps = parts.get(c.id) ?? [];
+      const leftover = c.post_count - ps.reduce((n, p) => n + p.post_count, 0);
+      const rest = leftover > 0 ? [{ ...c, post_count: leftover, excludeFine: ps.length > 0 }] : [];
+      return [...rest, ...ps];
+    });
+  }, [pins, cellPins]);
+  const areaClusters = useMemo(
+    () => (region ? clusterAreas(areaPoints, region) : []),
+    [areaPoints, region],
+  );
+
+  const zoomInto = (c: { lat: number; lon: number }) =>
     mapRef.current?.animateToRegion(
       {
         latitude: c.lat,
@@ -557,18 +605,31 @@ export function LocalMap({
             </View>
           </Marker>
         ))}
-        {cellPins.map((p) => (
-          <Marker
-            key={p.id}
-            coordinate={{ latitude: p.centre.lat, longitude: p.centre.lon }}
-            onPress={() => void openCell(p)}>
-            <View style={styles.cellPin}>
-              <ThemedText type="smallBold" style={styles.pinText}>
-                {p.post_count}
-              </ThemedText>
-            </View>
-          </Marker>
-        ))}
+        {areaClusters.map((c, i) =>
+          c.points.length > 1 ? (
+            <Marker
+              key={`ac-${i}-${c.points.length}`}
+              coordinate={{ latitude: c.lat, longitude: c.lon }}
+              onPress={() => zoomInto(c)}>
+              <View style={styles.cellPin}>
+                <ThemedText type="smallBold" style={styles.pinText}>
+                  {c.points.reduce((n, p) => n + p.post_count, 0)}
+                </ThemedText>
+              </View>
+            </Marker>
+          ) : (
+            <Marker
+              key={`a-${c.points[0].id}-${c.points[0].excludeFine ? 'rest' : 'all'}`}
+              coordinate={{ latitude: c.points[0].centre.lat, longitude: c.points[0].centre.lon }}
+              onPress={() => void openCell(c.points[0])}>
+              <View style={styles.cellPin}>
+                <ThemedText type="smallBold" style={styles.pinText}>
+                  {c.points[0].post_count}
+                </ThemedText>
+              </View>
+            </Marker>
+          ),
+        )}
       </MapView>
 
       {noPhotoPins && !selected ? (

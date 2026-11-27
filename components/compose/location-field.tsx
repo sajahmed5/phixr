@@ -9,6 +9,13 @@ import { useTheme } from '@/hooks/use-theme';
 import { coarseCell, getCurrentCoords, type NearbyPlace } from '@/lib/location';
 import type { PlaceRef } from '@/lib/pending-place';
 
+/** Picker results that are areas, not places (Google primary types). */
+const AREA_TYPES = new Set([
+  'locality', 'sublocality', 'political', 'country', 'postal_code', 'neighborhood', 'route',
+  'street_address', 'premise', 'administrative_area_level_1', 'administrative_area_level_2',
+  'administrative_area_level_3', 'colloquial_area',
+]);
+
 export type LocationValue = {
   attachLocation: boolean;
   locationCell: string | null;
@@ -58,11 +65,15 @@ export function LocationField({
   };
 
   const select = (p: NearbyPlace) => {
+    // A city, region or address isn't a place to tag the post to (it would be
+    // a pin at the city centre); the post keeps just the area. Apple gives
+    // those no id at all; Google does, with these types.
+    const isPlace = !!(p.provider && p.provider_place_id && !(p.category && AREA_TYPES.has(p.category)));
     onChange({
       attachLocation: true,
       locationCell: coarseCell(p.lat, p.lon),
       locationLabel: p.name,
-      placeRef: p.provider && p.provider_place_id ? { provider: p.provider, provider_place_id: p.provider_place_id } : null,
+      placeRef: isPlace ? { provider: p.provider!, provider_place_id: p.provider_place_id! } : null,
     });
     setPickerOpen(false);
   };

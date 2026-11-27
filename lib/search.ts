@@ -76,9 +76,11 @@ export async function getMapVenues(limit = 200): Promise<MapVenue[]> {
  * place them, so no exact position ever leaves the server.
  */
 export type MapPin = {
-  /** 'venue_part' (Stage 3): a venue's matching posts in one ~300m fine cell
-   *  (`cell`), so a big venue like a park splits into areas when zoomed in. */
-  kind: 'venue' | 'cell' | 'venue_part';
+  /** Stage 3: 'venue_part' — a venue's matching posts in one ~300m fine cell
+   *  (`cell`), so a big venue like a park splits into areas when zoomed in.
+   *  'cell_part' — untagged posts in one fine cell (`cell`) inside the coarse
+   *  cell `id`; the 'cell' row for that coarse cell still counts them too. */
+  kind: 'venue' | 'cell' | 'venue_part' | 'cell_part';
   id: string;
   name: string | null;
   category_group: string | null;
@@ -159,12 +161,16 @@ export async function getCellPosts(
   q: string,
   category: SearchCategory,
   limit = 12,
+  /** Coarse cells only: leave out posts that have a ~300m square (they show
+   *  as their own area pins). A fine 'f300:' id always means that square. */
+  excludeFine = false,
 ): Promise<CellPost[]> {
   const { data, error } = await supabase.rpc('get_cell_posts', {
     _cell: cellId,
     _q: q.trim() || null,
     _category: category,
     _limit: limit,
+    _exclude_fine: excludeFine,
   });
   if (error) throw error;
   return (data ?? []) as CellPost[];

@@ -282,6 +282,13 @@ export async function createPost(input: CreatePostInput): Promise<string> {
         ? (input.locationCell ?? result.suggestions.location_cell ?? null)
         : null,
       location_label: input.attachLocation ? (input.locationLabel?.trim() || null) : null,
+      // No place tag (a city or area was picked): the photo's ~300m square,
+      // never its GPS. The DB keeps it only if it's near the picked area.
+      // Place-tagged posts get theirs from the places function instead.
+      location_fine:
+        input.attachLocation && !input.placeRef?.provider_place_id && result.suggestions.gps
+          ? fineCell(result.suggestions.gps.latitude, result.suggestions.gps.longitude)
+          : null,
       overlays: input.overlays ?? [],
     })
     .select('id')
