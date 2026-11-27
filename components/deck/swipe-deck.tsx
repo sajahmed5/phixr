@@ -2,7 +2,7 @@
    `topProgress` passed to the card beneath) are intentionally mutated from worklets; the
    rule's "don't mutate props" heuristic doesn't model shared values. */
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -38,6 +38,11 @@ type SwipeDeckProps = {
   canUndo: boolean;
   onUndo: () => void;
   hideCounts?: boolean;
+  /** Space an overlay bar takes at the top (Home's logo + search, #78). */
+  topInset?: number;
+  /** Full view (#79). Pinch-to-full-view is on only when the screen handles it. */
+  fullView?: boolean;
+  onFullViewChange?: (on: boolean) => void;
 };
 
 /**
@@ -58,20 +63,29 @@ export function SwipeDeck({
   canUndo,
   onUndo,
   hideCounts,
+  topInset = 0,
+  fullView = false,
+  onFullViewChange,
 }: SwipeDeckProps) {
   const { width, height } = useWindowDimensions();
   // Drag magnitude of the top card (0..1), read by the card beneath to scale up.
   const topProgress = useSharedValue(0);
 
-  const handleSwipe = useCallback(
-    (direction: SwipeDirection) => {
-      topProgress.value = 0;
-      onSwipe(direction);
-    },
-    [onSwipe, topProgress],
-  );
-
   const visible = cards.slice(0, 2);
+  const topId = visible[0]?.id;
+
+  // #80: reset the beneath-card scale only AFTER the next card has become the top one.
+  // Resetting it inside the swipe callback (as before) shrank the card that was about to
+  // take over back to 94% for a frame or two before it re-rendered as the top card — part
+  // of the "the photo refreshes when I swipe" jolt.
+  useLayoutEffect(() => {
+    topProgress.value = 0;
+  }, [topId, topProgress]);
+
+  // Leaving the card (any way) ends full view, so the next card opens normally.
+  useEffect(() => {
+    onFullViewChange?.(false);
+  }, [topId, onFullViewChange]);
 
   return (
     <View style={styles.container}>
@@ -84,7 +98,7 @@ export function SwipeDeck({
           topProgress={topProgress}
           width={width}
           height={height}
-          onSwipe={handleSwipe}
+          onSwipe={onSwipe}
           onShare={onShare}
           onOpenComments={onOpenComments}
           onOpenProfile={onOpenProfile}
@@ -92,6 +106,8 @@ export function SwipeDeck({
           canUndo={canUndo}
           onUndo={onUndo}
           hideCounts={hideCounts}
+          topInset={topInset}
+          fullView={false}
         />
       ) : null}
       {visible[0] ? (
@@ -103,7 +119,7 @@ export function SwipeDeck({
           topProgress={topProgress}
           width={width}
           height={height}
-          onSwipe={handleSwipe}
+          onSwipe={onSwipe}
           onShare={onShare}
           onOpenComments={onOpenComments}
           onOpenProfile={onOpenProfile}
@@ -111,6 +127,9 @@ export function SwipeDeck({
           canUndo={canUndo}
           onUndo={onUndo}
           hideCounts={hideCounts}
+          topInset={topInset}
+          fullView={fullView}
+          onFullViewChange={onFullViewChange}
         />
       ) : null}
     </View>
@@ -132,6 +151,9 @@ type DeckCardViewProps = {
   canUndo: boolean;
   onUndo: () => void;
   hideCounts?: boolean;
+  topInset: number;
+  fullView: boolean;
+  onFullViewChange?: (on: boolean) => void;
 };
 
 function DeckCardView({
@@ -149,6 +171,9 @@ function DeckCardView({
   canUndo,
   onUndo,
   hideCounts,
+  topInset,
+  fullView,
+  onFullViewChange,
 }: DeckCardViewProps) {
   // Carousel page for this card. Per-card state, so it resets naturally when the card
   // is swiped away and a new one takes its place.
@@ -164,6 +189,20 @@ function DeckCardView({
   // Heart-pop overlay shown on a like, before the card leaves.
   const heartScale = useSharedValue(0);
   const heartOpacity = useSharedValue(0);
+
+  // #79 full view. Paid/partner posts keep their disclosure on screen, so no full view.
+  const canFullView = isTop && !!onFullViewChange && !card.is_ad && !card.partner_label;
+  const enterFullView = useCallback(() => onFullViewChange?.(true), [onFullViewChange]);
+  const exitFullView = useCallback(() => onFullViewChange?.(false), [onFullViewChange]);
+  // Mirrors of JS state the UI-thread gesture callbacks need.
+  const fullViewSV = useSharedValue(fullView);
+  useEffect(() => {
+    fullViewSV.value = fullView;
+  }, [fullView, fullViewSV]);
+  const pinchScale = useSharedValue(1);
+  const pinching = useSharedValue(false);
+  // A drag that began in full view only exits it; it never moves or commits the card.
+  const dragExitsFullView = useSharedValue(false);
 
   const commitX = width * 0.28;
   const commitY = height * 0.16;
@@ -207,10 +246,16 @@ function DeckCardView({
 
   const pan = Gesture.Pan()
     .enabled(isTop)
+    // One finger only: two fingers are a pinch, and must never drag the card away.
+    .maxPointers(1)
     .activeOffsetX([-12, 12])
     .activeOffsetY([-12, 12])
+    .onStart(() => {
+      dragExitsFullView.value = fullViewSV.value;
+      if (fullViewSV.value) runOnJS(exitFullView)();
+    })
     .onUpdate((e) => {
-      if (committed.value) return; // a tap/double-tap already committed this card
+      if (committed.value || dragExitsFullView.value || pinching.value) return;
       x.value = e.translationX;
       y.value = e.translationY;
       topProgress.value = Math.min(
@@ -220,6 +265,12 @@ function DeckCardView({
     })
     .onEnd((e) => {
       if (committed.value) return;
+      if (dragExitsFullView.value || pinching.value) {
+        x.value = withSpring(0);
+        y.value = withSpring(0);
+        topProgress.value = withSpring(0);
+        return;
+      }
       const up =
         (e.translationY < -commitY || e.velocityY < -VELOCITY_THRESHOLD) &&
         Math.abs(e.translationY) > Math.abs(e.translationX);
@@ -251,7 +302,7 @@ function DeckCardView({
   // so it can call `like` directly. Simultaneous with the pan: a double-tap is stationary
   // so the pan (which needs 12px of movement) never activates, and vice-versa.
   const doubleTap = Gesture.Tap()
-    .enabled(isTop)
+    .enabled(isTop && !fullView)
     .numberOfTaps(2)
     .maxDuration(260)
     .runOnJS(true)
@@ -261,13 +312,40 @@ function DeckCardView({
   // double-tap win first, so tap-to-advance never steals a like; a single tap simply
   // resolves once the double-tap window lapses. Left/right swipe still acts on the
   // whole post, so a carousel is liked/skipped as one thing.
+  // In full view a single tap brings the info back instead (#79).
   const singleTap = Gesture.Tap()
-    .enabled(isTop && shotCount > 1)
+    .enabled(isTop && (shotCount > 1 || fullView))
     .numberOfTaps(1)
     .runOnJS(true)
-    .onEnd(() => setPage((p) => (p + 1) % shotCount));
+    .onEnd(() => {
+      if (fullView) exitFullView();
+      else setPage((p) => (p + 1) % shotCount);
+    });
 
-  const gesture = Gesture.Simultaneous(pan, Gesture.Exclusive(doubleTap, singleTap));
+  // #79: pinch zooms the photo with the fingers; letting go past a small zoom opens the
+  // full view (whole uncropped photo, overlays hidden). The zoom always eases back.
+  const pinch = Gesture.Pinch()
+    .enabled(canFullView && !fullView)
+    .onStart(() => {
+      pinching.value = true;
+      x.value = withSpring(0);
+      y.value = withSpring(0);
+    })
+    .onUpdate((e) => {
+      pinchScale.value = Math.min(4, Math.max(1, e.scale));
+    })
+    .onEnd(() => {
+      const open = pinchScale.value > 1.15;
+      pinchScale.value = withTiming(1, { duration: 180 });
+      if (open) runOnJS(enterFullView)();
+    })
+    .onFinalize(() => {
+      pinching.value = false;
+    });
+
+  const gesture = Gesture.Simultaneous(pan, pinch, Gesture.Exclusive(doubleTap, singleTap));
+
+  const mediaStyle = useAnimatedStyle(() => ({ transform: [{ scale: pinchScale.value }] }));
 
   const cardStyle = useAnimatedStyle(() => {
     if (isTop) {
@@ -310,16 +388,19 @@ function DeckCardView({
         canUndo={isTop ? canUndo : undefined}
         onUndo={isTop ? onUndo : undefined}
         hideCounts={hideCounts}
+        topInset={topInset}
+        fullView={fullView}
+        mediaStyle={mediaStyle}
       />
       {isTop ? (
         <>
-          <Animated.View style={[styles.stamp, styles.stampLeft, likeStyle]}>
+          <Animated.View style={[styles.stamp, styles.stampLeft, { top: 40 + topInset }, likeStyle]}>
             <SwipeStamp label="LIKE" color="#2E7D46" />
           </Animated.View>
-          <Animated.View style={[styles.stamp, styles.stampRight, skipStyle]}>
+          <Animated.View style={[styles.stamp, styles.stampRight, { top: 40 + topInset }, skipStyle]}>
             <SwipeStamp label="SKIP" color="#D64545" />
           </Animated.View>
-          <Animated.View style={[styles.stamp, styles.stampTop, shareStyle]}>
+          <Animated.View style={[styles.stamp, styles.stampTop, { top: 80 + topInset }, shareStyle]}>
             <SwipeStamp label="SHARE" color="#208AEF" />
           </Animated.View>
           <Animated.View style={styles.heart} pointerEvents="none">
@@ -332,7 +413,11 @@ function DeckCardView({
     </Animated.View>
   );
 
-  return isTop ? <GestureDetector gesture={gesture}>{content}</GestureDetector> : content;
+  // #80: ALWAYS wrap in the detector (its gestures are disabled on the beneath card).
+  // Wrapping only the top card changed the element tree when the beneath card took over,
+  // so React threw its whole subtree away and rebuilt it: the photo faded in again and
+  // the bottom scrim vanished for a frame — the "refresh" seen on every swipe.
+  return <GestureDetector gesture={gesture}>{content}</GestureDetector>;
 }
 
 const styles = StyleSheet.create({

@@ -3,14 +3,15 @@ import { Canvas, LinearGradient, Rect, vec } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { memo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { type AnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { CardMedia } from '@/components/deck/card-media';
 import { SensitiveCover } from '@/components/sensitive-cover';
 import { AdOverlay } from '@/components/deck/ad-overlay';
-import { BRAND, TAB_BAR_CLEARANCE } from '@/constants/config';
+import { TAB_BAR_CLEARANCE } from '@/constants/config';
 import type { DeckCard } from '@/lib/deck';
 import { formatCount } from '@/lib/format';
 import { isOpenablePlace, placeHref } from '@/lib/places';
@@ -34,6 +35,9 @@ export const SwipeCard = memo(function SwipeCard({
   canUndo,
   onUndo,
   hideCounts,
+  topInset = 0,
+  fullView = false,
+  mediaStyle,
 }: {
   card: DeckCard;
   isActive: boolean;
@@ -51,9 +55,18 @@ export const SwipeCard = memo(function SwipeCard({
   onUndo?: () => void;
   /** Part 14D: viewer hides like counts on other people's posts. */
   hideCounts?: boolean;
+  /** Space taken at the top by an overlay bar (Home's full-screen logo + search, #78),
+   *  so the rail and carousel counter start below it. */
+  topInset?: number;
+  /** Full view (#79): the whole uncropped photo on black, every overlay hidden. */
+  fullView?: boolean;
+  /** Pinch-zoom transform for the media only (#79), driven by the deck's gesture. */
+  mediaStyle?: StyleProp<AnimatedStyle<StyleProp<ViewStyle>>>;
 }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const tagFit = fitTags(card.tags, width - 36);
   const [scrimBox, setScrimBox] = useState({ w: 0, h: 0 });
   // Sensitive cover (6B): covered until the viewer taps. Server never sends
   // sensitive cards to minors, so reaching here means an adult viewer.
@@ -64,14 +77,18 @@ export const SwipeCard = memo(function SwipeCard({
   const current = shots?.[Math.min(page, shots.length - 1)];
   const shown = current ? { ...card, media_url: current.media_url, media_type: current.media_type } : card;
   return (
-    <View style={styles.card}>
-      <CardMedia card={shown} isActive={isActive} />
+    <View style={[styles.card, fullView && styles.cardFull]}>
+      <Animated.View style={[StyleSheet.absoluteFill, mediaStyle]}>
+        <CardMedia card={shown} isActive={isActive} fit={fullView ? 'contain' : 'cover'} />
+      </Animated.View>
       {card.sensitive && !revealed ? <SensitiveCover onReveal={() => setRevealed(true)} /> : null}
       {card.is_ad ? <AdOverlay card={card} isActive={isActive} /> : null}
 
+      {fullView ? null : (
+      <>
       {/* Position counter — static, so it never competes with tap-to-advance. */}
       {shots ? (
-        <View style={[styles.carousel, { top: 16 }]} pointerEvents="none">
+        <View style={[styles.carousel, { top: 16 + topInset }]} pointerEvents="none">
           <Ionicons name="copy" size={13} color="#fff" />
           <ThemedText type="small" style={styles.carouselText}>
             {Math.min(page, shots.length - 1) + 1}/{shots.length}
@@ -81,7 +98,7 @@ export const SwipeCard = memo(function SwipeCard({
 
       {/* Top-right: like / skip / comment. Tapping the heart likes, the cross skips —
           same commit path as a swipe (handled by the parent via onLike/onSkip). */}
-      <View style={styles.topRight}>
+      <View style={[styles.topRight, { top: 16 + topInset }]}>
         <ActionStat
           icon="heart"
           value={hideCounts ? null : card.like_count}
@@ -101,7 +118,7 @@ export const SwipeCard = memo(function SwipeCard({
           accessibilityRole="button"
           accessibilityLabel="Open comments"
           style={({ pressed }) => [styles.commentButton, pressed && { opacity: 0.6 }]}>
-          <Ionicons name="chatbubble" size={20} color={BRAND.accent} style={styles.railIcon} />
+          <Ionicons name="chatbubble" size={RAIL_ICON} color={RAIL_TINT} style={styles.railIcon} />
           <ThemedText type="small" style={styles.statText}>
             {formatCount(card.comment_count)}
           </ThemedText>
@@ -118,7 +135,7 @@ export const SwipeCard = memo(function SwipeCard({
               styles.actionButton,
               { opacity: canUndo ? (pressed ? 0.6 : 1) : 0.35 },
             ]}>
-            <Ionicons name="arrow-undo" size={20} color={BRAND.accent} style={styles.railIcon} />
+            <Ionicons name="arrow-undo" size={RAIL_ICON} color={RAIL_TINT} style={styles.railIcon} />
           </Pressable>
         ) : null}
       </View>
@@ -138,8 +155,8 @@ export const SwipeCard = memo(function SwipeCard({
             <LinearGradient
               start={vec(0, 0)}
               end={vec(0, scrimBox.h)}
-              colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.28)', 'rgba(0,0,0,0.55)']}
-              positions={[0, 0.45, 1]}
+              colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.78)']}
+              positions={[0, 0.35, 1]}
             />
           </Rect>
         </Canvas>
@@ -236,14 +253,14 @@ export const SwipeCard = memo(function SwipeCard({
         </Pressable>
 
         {card.caption ? (
-          <ThemedText type="default" style={styles.onMedia} numberOfLines={3}>
+          <ThemedText type="default" style={styles.onMedia} numberOfLines={2}>
             {card.caption}
           </ThemedText>
         ) : null}
 
         {card.tags.length > 0 ? (
           <View style={styles.tagRow} pointerEvents="box-none">
-            {card.tags.map((t) => (
+            {tagFit.shown.map((t) => (
               <Pressable
                 key={t}
                 onPress={isActive && onOpenTag ? () => onOpenTag(t) : undefined}
@@ -257,12 +274,44 @@ export const SwipeCard = memo(function SwipeCard({
                 </ThemedText>
               </Pressable>
             ))}
+            {tagFit.hidden > 0 ? (
+              <ThemedText type="small" style={styles.tagMore}>
+                +{tagFit.hidden}
+              </ThemedText>
+            ) : null}
           </View>
         ) : null}
       </View>
+      </>
+      )}
     </View>
   );
 });
+
+/** Rail icons (like / skip / comment / undo) and Home's search share one size and colour
+ *  (#78): white with a drop shadow, so they read on any photo. */
+export const RAIL_ICON = 22;
+export const RAIL_TINT = '#FFFFFF';
+
+/**
+ * #77: tags stay on ONE line — as many as fit, then "+N". An estimate (no measuring pass,
+ * so no flicker): ~7pt per character at the small size, plus the 10pt gap.
+ */
+function fitTags(tags: string[], width: number): { shown: string[]; hidden: number } {
+  const CHAR = 7;
+  const GAP = 10;
+  const MORE = 3 * CHAR + GAP;
+  const shown: string[] = [];
+  let used = 0;
+  for (let i = 0; i < tags.length; i++) {
+    const cost = (tags[i].length + 1) * CHAR + (shown.length ? GAP : 0);
+    const reserve = i < tags.length - 1 ? MORE : 0;
+    if (used + cost + reserve > width && shown.length > 0) break;
+    shown.push(tags[i]);
+    used += cost;
+  }
+  return { shown, hidden: tags.length - shown.length };
+}
 
 function ActionStat({
   icon,
@@ -284,7 +333,7 @@ function ActionStat({
       accessibilityRole="button"
       accessibilityLabel={label}
       style={({ pressed }) => [styles.stat, pressed && { opacity: 0.6 }]}>
-      <Ionicons name={icon} size={20} color={BRAND.accent} style={styles.railIcon} />
+      <Ionicons name={icon} size={RAIL_ICON} color={RAIL_TINT} style={styles.railIcon} />
       {value == null ? null : (
         <ThemedText type="small" style={styles.statText}>
           {formatCount(value)}
@@ -310,6 +359,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#111',
   },
+  cardFull: { backgroundColor: '#000' },
   topRight: {
     position: 'absolute',
     top: 16,
@@ -345,7 +395,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     padding: 18,
-    paddingTop: 24,
+    paddingTop: 40,
     gap: 8,
   },
   posterRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -367,7 +417,8 @@ const styles = StyleSheet.create({
   posterText: { flex: 1 },
   onMedia: { color: '#fff', ...textShadow },
   onMediaDim: { color: 'rgba(255,255,255,0.85)' },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 10, rowGap: 4 },
+  tagRow: { flexDirection: 'row', flexWrap: 'nowrap', columnGap: 10, overflow: 'hidden' },
+  tagMore: { color: 'rgba(255,255,255,0.85)', ...textShadow },
   placePill: {
     flexDirection: 'row',
     alignItems: 'center',

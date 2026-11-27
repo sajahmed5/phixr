@@ -1,15 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useState } from 'react';
-import { Platform } from 'react-native';
-
 import { CameraTabButton } from '@/components/camera-tab-button';
-import { PhixrLockup } from '@/components/brand/phixr-logo';
 import { HeaderSearchButton } from '@/components/header-search-button';
 import { NotificationBellButton } from '@/components/notification-bell-button';
 import { SettingsGearButton } from '@/components/settings-gear-button';
 import { BRAND, TAB_BAR } from '@/constants/config';
 import { TAB_BAR_FILL } from '@/constants/theme';
+import { floatingTabBarStyle, HOME_TAB_BAR_FILL } from '@/lib/tab-bar-style';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 import { AccountSwitcher } from '@/components/account-switcher';
@@ -40,47 +38,22 @@ export default function TabsLayout() {
         headerShadowVisible: false,
         // Instagram-style: a rounded pill floating above the bottom edge, so the feed
         // flows under it. Screens that scroll pad their content by TAB_BAR_CLEARANCE.
-        tabBarStyle: {
-          position: 'absolute',
-          left: TAB_BAR.side,
-          right: TAB_BAR.side,
-          // A fixed gap from the screen edge, level with the iPhone home indicator. Don't
-          // derive it from insets.bottom: that floated the pill 19-38pt up.
-          bottom: TAB_BAR.bottom,
-          height: TAB_BAR.height,
-          borderRadius: TAB_BAR.height / 2,
-          backgroundColor: TAB_BAR_FILL[scheme === 'dark' ? 'dark' : 'light'],
-          borderTopWidth: 0,
-          paddingHorizontal: 6,
-          // The tab bar pads itself by insets.bottom (34pt on iPhone) for a docked bar.
-          // Inside a 60pt floating pill that squeezed the icons upward, so turn it off.
-          paddingBottom: 0,
-          ...Platform.select({
-            web: { boxShadow: '0px 6px 20px rgba(0,0,0,0.18)' },
-            default: {
-              shadowColor: '#000',
-              shadowOpacity: 0.16,
-              shadowRadius: 14,
-              shadowOffset: { width: 0, height: 5 },
-              elevation: 10,
-            },
-          }),
-        },
+        tabBarStyle: floatingTabBarStyle(TAB_BAR_FILL[scheme === 'dark' ? 'dark' : 'light']),
         tabBarItemStyle: { height: TAB_BAR.height, paddingVertical: 8 },
       }}>
-      {/* 1. Home — worldwide feed */}
+      {/* 1. Home — worldwide feed. Full-screen (#78): no header; the phixr lockup and
+          search sit on the photo (drawn by the screen itself), and the pill turns dark
+          glass so it reads as part of the photo rather than a slab on top (#77). */}
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          // The phixr lockup IS the Home header — left-aligned, so it reads as "our app",
-          // not a generic feed.
-          headerTitle: () => <PhixrLockup height={24} />,
-          headerTitleAlign: 'left',
+          headerShown: false,
+          tabBarStyle: floatingTabBarStyle(HOME_TAB_BAR_FILL),
+          tabBarInactiveTintColor: '#FFFFFF',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? 'home' : 'home-outline'} size={size} color={color} />
           ),
-          headerRight: () => <HeaderSearchButton />,
         }}
       />
 

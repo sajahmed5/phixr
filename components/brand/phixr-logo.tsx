@@ -11,9 +11,10 @@ const LOCKUP_RATIO = 1020 / 300; // lockup viewBox aspect
  * wordmark is the orange gradient on light backgrounds and white on dark ones.
  * Size it by `height`; width is derived from the lockup's aspect ratio.
  */
-export function PhixrLockup({ height = 28 }: { height?: number }) {
+export function PhixrLockup({ height = 28, onMedia = false }: { height?: number; onMedia?: boolean }) {
   const scheme = useColorScheme();
-  const xml = scheme === 'dark' ? LOCKUP_DARK : LOCKUP_LIGHT;
+  // On a photo (Home's full-screen feed) the white wordmark reads on any image.
+  const xml = onMedia || scheme === 'dark' ? LOCKUP_DARK : LOCKUP_LIGHT;
   return (
     <SvgXml
       xml={xml}
