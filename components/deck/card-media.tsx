@@ -38,17 +38,69 @@ export function CardMedia({
   return <CardImage card={card} fit={fit} />;
 }
 
+/**
+ * Width ÷ height of each photo, keyed by its stable storage key (signed URLs rotate). Filled
+ * from the image's own load event, so a photo seen before lays out right on the first frame.
+ */
+const photoRatios = new Map<string, number>();
+/** Wider than this counts as landscape (a little slack so near-square photos still fill). */
+const LANDSCAPE_RATIO = 1.05;
+
 function CardImage({ card, fit }: { card: DeckCard; fit: MediaFit }) {
+  const source = mediaSource(card.media_url);
+  const key = source?.cacheKey ?? card.media_url;
+  // Bumped when a ratio is first learned, so the card re-renders with the right layout.
+  const [, setLearned] = useState(0);
+  const ratio = photoRatios.get(key);
+  // Landscape photos are shown WHOLE in the feed (reported 27 Nov: a wide photo was
+  // cropped to a narrow slice). The photo sits edge to edge across the width, over a
+  // blurred, darkened copy of itself filling the rest, so there are no black bars.
+  // Portrait photos keep filling the screen. Full view already shows everything.
+  const landscape = fit === 'cover' && ratio !== undefined && ratio > LANDSCAPE_RATIO;
+  const label = card.alt_text || card.caption || 'Post image';
+
+  const onLoad = (e: { source: { width: number; height: number } }) => {
+    const { width, height } = e.source;
+    if (!width || !height || photoRatios.has(key)) return;
+    photoRatios.set(key, width / height);
+    setLearned((n) => n + 1);
+  };
+
+  if (landscape) {
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        <Image
+          source={source}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          blurRadius={40}
+          recyclingKey={`${card.id}-backdrop`}
+          accessible={false}
+        />
+        <View style={[StyleSheet.absoluteFill, styles.backdropDim]} />
+        <Image
+          source={source}
+          style={StyleSheet.absoluteFill}
+          contentFit="contain"
+          recyclingKey={card.id}
+          accessibilityRole="image"
+          accessibilityLabel={label}
+        />
+      </View>
+    );
+  }
+
   return (
     <Image
-      source={mediaSource(card.media_url)}
+      source={source}
       style={StyleSheet.absoluteFill}
       contentFit={fit}
       transition={180}
       recyclingKey={card.id}
+      onLoad={onLoad}
       accessibilityRole="image"
       // Surface the poster's alt text to screen readers.
-      accessibilityLabel={card.alt_text || card.caption || 'Post image'}
+      accessibilityLabel={label}
     />
   );
 }
@@ -186,6 +238,7 @@ function CardVideo({ card, isActive, fit }: { card: DeckCard; isActive: boolean;
 }
 
 const styles = StyleSheet.create({
+  backdropDim: { backgroundColor: 'rgba(0,0,0,0.35)' },
   muteBadge: {
     position: 'absolute',
     bottom: 16,
