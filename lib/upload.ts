@@ -1,5 +1,7 @@
+import { File } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Platform } from 'react-native';
+import { Video } from 'react-native-compressor';
 
 import { isOnline } from '@/lib/connectivity';
 import { SUPABASE_ANON_KEY, SUPABASE_URL, supabase } from '@/lib/supabase';
@@ -12,6 +14,18 @@ import type { VideoOverlay } from '@/lib/video-overlays';
 // budget; larger images upload successfully but without a location suggestion.
 const CLIENT_MAX_EDGE = 2048; // longest edge → ≤ ~4 MP for typical aspect ratios
 const CLIENT_MAX_PIXELS = 4_000_000;
+
+// Videos are shrunk on the phone before upload: phone clips are often 4K/60fps at
+// 40+ Mbps (a 60 s clip can be 100–400 MB), but the pipeline can only take ~45 MB
+// (storage upload limit + edge memory). 1080p at 5 Mbps keeps a 60 s clip ≈ 40 MB,
+// and the server re-encodes to its own 1080p/30fps/6 Mbps ceiling anyway, so nothing
+// visible is lost. Metadata (incl. GPS) is dropped on the device.
+const VIDEO_MAX_EDGE = 1920;
+const VIDEO_BITRATE = 5_000_000;
+// Matches MEDIA_MAX_VIDEO_BYTES in the media pipeline.
+const CLIENT_MAX_VIDEO_BYTES = 45 * 1024 * 1024;
+// Share of the progress bar spent compressing (the rest is the upload).
+const COMPRESS_SHARE = 0.4;
 
 // Shape returned by the media-pipeline Edge Function.
 export type TagSuggestion = {
@@ -47,13 +61,25 @@ export type PickedMedia = {
   height?: number;
 };
 
+function fileSize(uri: string): number | null {
+  try {
+    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(uri) ? uri : `file://${uri}`;
+    return new File(withScheme).size;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Downscale an oversized image to fit the pipeline's decode budget. Returns a new
- * PickedMedia pointing at the resized JPEG (EXIF is dropped by the re-encode). Images
- * already within budget, and all videos, pass through untouched.
+ * Get media ready for the pipeline. Oversized images are downscaled to fit its decode
+ * budget (EXIF is dropped by the re-encode). Videos are compressed to 1080p / 5 Mbps on
+ * the device and must then fit CLIENT_MAX_VIDEO_BYTES. Small images pass through.
  */
-export async function prepareForUpload(media: PickedMedia): Promise<PickedMedia> {
-  if (media.type !== 'image') return media;
+export async function prepareForUpload(
+  media: PickedMedia,
+  onProgress?: (fraction: number) => void,
+): Promise<PickedMedia> {
+  if (media.type === 'video') return prepareVideo(media, onProgress);
   const pixels = (media.width ?? 0) * (media.height ?? 0);
   const longest = Math.max(media.width ?? 0, media.height ?? 0);
   if (pixels && pixels <= CLIENT_MAX_PIXELS && longest <= CLIENT_MAX_EDGE) return media;
@@ -67,6 +93,33 @@ export async function prepareForUpload(media: PickedMedia): Promise<PickedMedia>
   const ref = await ctx.renderAsync();
   const out = await ref.saveAsync({ compress: 0.9, format: ImageManipulator.SaveFormat.JPEG });
   return { ...media, uri: out.uri, mime: 'image/jpeg', fileName: 'upload.jpg' };
+}
+
+async function prepareVideo(
+  media: PickedMedia,
+  onProgress?: (fraction: number) => void,
+): Promise<PickedMedia> {
+  // The browser build has no native compressor; the server's size check still applies.
+  if (Platform.OS === 'web') return media;
+  let out = media;
+  try {
+    const uri = await Video.compress(
+      media.uri,
+      { compressionMethod: 'manual', maxSize: VIDEO_MAX_EDGE, bitrate: VIDEO_BITRATE, preserveMetadata: false },
+      (p) => onProgress?.(Math.min(1, Math.max(0, p))),
+    );
+    out = { ...media, uri, mime: 'video/mp4', fileName: 'upload.mp4' };
+  } catch {
+    // Compression failed: fall back to the original if it's small enough to send.
+  }
+  const size = fileSize(out.uri);
+  if (size != null && size > CLIENT_MAX_VIDEO_BYTES) {
+    throw new UploadFailed(
+      `This video is too large to upload (max ${Math.round(CLIENT_MAX_VIDEO_BYTES / 1048576)} MB). Try a shorter clip.`,
+      false,
+    );
+  }
+  return out;
 }
 
 // A rejection by the adult-content scan is a normal outcome, not a thrown error.
@@ -99,11 +152,16 @@ export function uploadToPipeline(
     const token = data.session?.access_token;
     if (!token) return reject(new UploadFailed('Not signed in.'));
 
+    // Videos spend the first part of the progress bar compressing on the device.
+    const share = media.type === 'video' && Platform.OS !== 'web' ? COMPRESS_SHARE : 0;
     let prepared: PickedMedia;
     try {
-      prepared = await prepareForUpload(media);
-    } catch {
-      return reject(new UploadFailed('Could not prepare the image for upload.'));
+      prepared = await prepareForUpload(media, (f) => onProgress(f * share));
+    } catch (e) {
+      if (e instanceof UploadFailed) return reject(e);
+      return reject(
+        new UploadFailed(`Could not prepare the ${media.type === 'video' ? 'video' : 'image'} for upload.`),
+      );
     }
 
     const filename = prepared.fileName ?? `upload.${prepared.type === 'video' ? 'mp4' : 'jpg'}`;
@@ -132,7 +190,7 @@ export function uploadToPipeline(
     xhr.setRequestHeader('apikey', SUPABASE_ANON_KEY);
 
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.min(0.99, e.loaded / e.total));
+      if (e.lengthComputable) onProgress(Math.min(0.99, share + (1 - share) * (e.loaded / e.total)));
     };
     xhr.onload = () => {
       let body: Record<string, unknown> = {};
