@@ -25,6 +25,7 @@ import type { PickedMedia } from '@/lib/upload';
 import { useUpload } from '@/lib/upload-manager';
 
 const MAX_VIDEO_MS = 60_000;
+const CAMERA_VIDEO_BITRATE = 5_000_000;
 
 export default function CameraScreen() {
   const insets = useSafeAreaInsets();
@@ -178,7 +179,11 @@ export default function CameraScreen() {
     }, 100);
     try {
       // maxDuration is the HARD cap — recording stops itself at the limit.
-      const video = await cameraRef.current.recordAsync({ maxDuration: videoMaxMs / 1000 });
+      // iOS only applies videoBitrate when the codec is named explicitly.
+      const video = await cameraRef.current.recordAsync({
+        maxDuration: videoMaxMs / 1000,
+        ...(Platform.OS === 'ios' ? { codec: 'avc1' as const } : {}),
+      });
       if (video?.uri) {
         startNewComposition({
           uri: video.uri,
@@ -276,6 +281,11 @@ export default function CameraScreen() {
               flash={flash}
               mode={mode}
               zoom={zoom}
+              // 1080p at 5 Mbps: a 60 s clip ≈ 40 MB, inside the pipeline's 45 MB limit
+              // (4K recordings blew past it). Upload still compresses, this just
+              // avoids recording far more than we can keep.
+              videoQuality="1080p"
+              videoBitrate={CAMERA_VIDEO_BITRATE}
             />
             {zoom > 0.005 ? (
               <View style={[styles.zoomPill, { top: insets.top + 64 }]} pointerEvents="none">

@@ -44,6 +44,23 @@ Deno.serve(withSentry('media-pipeline', async (req) => {
   const user = userData?.user;
   if (authErr || !user) return json({ error: 'unauthorized' }, 401);
 
+  // ---- Size gate BEFORE reading the body or spending a rate-limit slot. ----
+  // Reading an oversized body crashes the isolate (WORKER_RESOURCE_LIMIT) before the
+  // per-kind check in process.ts can answer, so refuse on the declared length here.
+  const declared = Number(req.headers.get('content-length') ?? '');
+  const maxBody = Math.max(config.limits.maxVideoBytes, config.limits.maxImageBytes) + 1024 * 1024; // + multipart overhead
+  if (Number.isFinite(declared) && declared > maxBody) {
+    // Drain (without keeping) the upload first: answering while the client is still
+    // sending makes the Supabase gateway turn our 413 into a Cloudflare 502.
+    try {
+      for await (const _chunk of req.body ?? []) { /* discard */ }
+    } catch { /* client went away — nothing to answer */ }
+    return json({
+      error: 'too_large',
+      message: `That file is too large to upload (max ${Math.round(config.limits.maxVideoBytes / 1048576)} MB). Try a shorter clip.`,
+    }, 413);
+  }
+
   // ---- SECURITY: per-user rate limit (recorded under the caller's identity). ----
   const { data: allowed, error: rlErr } = await uclient.rpc('claim_media_upload_slot', {
     _max: config.limits.uploadsPerHour,

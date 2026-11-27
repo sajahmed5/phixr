@@ -54,6 +54,12 @@ export class SwipeQueue {
     return this.ops.length;
   }
 
+  /** Post ids with an unsynced swipe — the server doesn't know about these yet, so the
+   *  deck must exclude them itself or they'd be re-served. */
+  get pendingSwipePostIds(): string[] {
+    return this.ops.filter((op) => op.type === 'swipe').map((op) => op.postId);
+  }
+
   enqueueSwipe(postId: string, direction: SwipeDirection): void {
     this.ops.push({ id: this.nextId(), type: 'swipe', postId, direction });
     void this.persist();

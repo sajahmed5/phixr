@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTheme } from '@/hooks/use-theme';
+import { mediaSource } from '@/lib/media';
 import type { GridPost } from '@/lib/profile';
 
 type Props = {
@@ -106,7 +107,7 @@ export function PostGrid({
           accessibilityRole="button"
           accessibilityLabel={`${item.media_type === 'video' ? 'Video' : 'Photo'} post${item.visibility === 'private' ? ', private' : ''}`}>
           <Image
-            source={{ uri: item.thumbnail_url }}
+            source={mediaSource(item.thumbnail_url)}
             style={styles.thumb}
             contentFit="cover"
             recyclingKey={item.id}

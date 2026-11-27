@@ -296,11 +296,21 @@ export async function setConversationPinned(cid: string, pinned: boolean): Promi
 }
 
 export function subscribeToInbox(onChange: () => void): () => void {
+  // Trailing debounce: the handler refetches the whole inbox, and a busy group chat
+  // delivers one INSERT per message — collapse a burst into a single refetch.
+  let timer: ReturnType<typeof setTimeout> | null = null;
   const channel = supabase
     .channel(uniqueChannel('inbox'))
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => onChange())
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        onChange();
+      }, 2500);
+    })
     .subscribe();
   return () => {
+    if (timer) clearTimeout(timer);
     void supabase.removeChannel(channel);
   };
 }

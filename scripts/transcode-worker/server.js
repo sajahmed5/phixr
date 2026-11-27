@@ -82,17 +82,23 @@ async function transcode({ stagingPath, userId, mediaId }) {
       outFile,
     ], { maxBuffer: 1024 * 1024 * 16 });
 
-    // 4. poster frame
-    await exec('ffmpeg', ['-y', '-i', outFile, '-frames:v', '1', '-q:v', '3', posterFile]);
+    // 4. poster frame. It doubles as the grid thumbnail (shown at ~130pt), and in the deck
+    //    it's only visible until the first video frame — 720 on the short edge is plenty;
+    //    full 1080x1920 was ~2x the bytes for every grid cell of every video.
+    await exec('ffmpeg', [
+      '-y', '-i', outFile, '-frames:v', '1',
+      '-vf', "scale='if(gt(iw,ih),-2,min(720,iw))':'if(gt(iw,ih),min(720,ih),-2)'",
+      '-q:v', '4', posterFile,
+    ]);
 
     const meta = await probe(outFile);
 
     // 5. upload to serving bucket
     const mediaPath = `${userId}/${mediaId}.mp4`;
     const posterPath = `${userId}/${mediaId}_thumb.jpg`;
-    const up1 = await supabase.storage.from(SERVING_BUCKET).upload(mediaPath, await readFile(outFile), { contentType: 'video/mp4', upsert: true });
+    const up1 = await supabase.storage.from(SERVING_BUCKET).upload(mediaPath, await readFile(outFile), { contentType: 'video/mp4', upsert: true, cacheControl: '31536000' });
     if (up1.error) throw new Error(`upload mp4: ${up1.error.message}`);
-    const up2 = await supabase.storage.from(SERVING_BUCKET).upload(posterPath, await readFile(posterFile), { contentType: 'image/jpeg', upsert: true });
+    const up2 = await supabase.storage.from(SERVING_BUCKET).upload(posterPath, await readFile(posterFile), { contentType: 'image/jpeg', upsert: true, cacheControl: '31536000' });
     if (up2.error) throw new Error(`upload poster: ${up2.error.message}`);
 
     // 6. drop staging

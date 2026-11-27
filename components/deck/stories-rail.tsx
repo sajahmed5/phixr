@@ -28,12 +28,14 @@ export function StoriesRail() {
         .catch(() => {});
       // Own stories only (RLS): is any live one group-limited? Owner ring hint.
       void (async () => {
-        const { data: u } = await supabase.auth.getUser();
-        if (!u.user) return;
+        // Local session read — getUser() was a network round trip just for the uid.
+        const { data: s } = await supabase.auth.getSession();
+        const uid = s.session?.user.id;
+        if (!uid) return;
         const { data } = await supabase
           .from('stories')
           .select('audience')
-          .eq('user_id', u.user.id)
+          .eq('user_id', uid)
           .gt('expires_at', new Date().toISOString())
           .eq('audience', 'groups')
           .limit(1);

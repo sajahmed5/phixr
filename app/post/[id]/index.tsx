@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -48,9 +48,9 @@ import { parseVideoOverlays } from '@/lib/video-overlays';
 import { confirm } from '@/lib/confirm';
 import { recordSwipe, undoSwipe } from '@/lib/deck';
 import { formatCount } from '@/lib/format';
+import { mediaSource } from '@/lib/media';
 import {
   deletePost,
-  getMyPosts,
   getPostDetail,
   getPostExtras,
   getVideoCaptions,
@@ -59,7 +59,7 @@ import {
   type PostDetail,
   type PostMediaItem,
 } from '@/lib/posts';
-import { getProfilePosts } from '@/lib/profile';
+import { getProfilePostIds } from '@/lib/profile';
 import { downloadOwnPostMedia } from '@/lib/share';
 
 /** How many comments to show inline before "View all". Two fits without pushing the
@@ -126,19 +126,18 @@ export default function PostViewScreen() {
     setPinned(!!(post as unknown as { pinned_at?: string | null })?.pinned_at);
   }, [post]);
   useEffect(() => {
-    // #63: on someone else's post their visible grid becomes the browse set — the
-    // same fetch the profile screen uses, so RLS has already filtered out anything
-    // this viewer isn't allowed to see.
+    // #63: on someone else's post their visible grid becomes the browse set — same RLS
+    // filtering as the profile grid. Ids only: this used to fetch the whole grid (and
+    // sign every thumbnail) just to step between posts.
     if (!posterId) return;
     let alive = true;
-    const ids = isOwner
-      ? getMyPosts().then((rows) => rows.map((r) => r.id))
-      : getProfilePosts(posterId).then((rows) => rows.map((r) => r.id));
-    void ids.then((list) => alive && setSiblings(list)).catch(() => {});
+    void getProfilePostIds(posterId)
+      .then((list) => alive && setSiblings(list))
+      .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [isOwner, posterId]);
+  }, [posterId]);
 
   const siblingIndex = id ? siblings.indexOf(id) : -1;
   const goToSibling = useCallback(
@@ -407,7 +406,7 @@ export default function PostViewScreen() {
                 <PostVideo uri={post.media_url} overlays={post.overlays} />
               ) : (
                 <Image
-                  source={{ uri: post.media_url }}
+                  source={mediaSource(post.media_url)}
                   style={[styles.media, aspect ? { aspectRatio: aspect } : null]}
                   contentFit="cover"
                   onLoad={(e) => setAspect(clampAspect(e.source.width, e.source.height))}
@@ -429,10 +428,10 @@ export default function PostViewScreen() {
                     (m, i) => (
                       <View key={i} style={{ width: pageW }}>
                         {m.media_type === 'video' ? (
-                          <PostVideo uri={m.media_url} />
+                          <PostVideo uri={m.media_url} active={page === i} />
                         ) : (
                           <Image
-                            source={{ uri: m.media_url }}
+                            source={mediaSource(m.media_url)}
                             style={[styles.media, aspect ? { aspectRatio: aspect } : null]}
                             contentFit="cover"
                             onLoad={
@@ -882,12 +881,32 @@ function Stat({
   );
 }
 
-function PostVideo({ uri, overlays }: { uri: string; overlays?: unknown }) {
-  const player = useVideoPlayer(uri, (p) => {
+function PostVideo({ uri, overlays, active = true }: { uri: string; overlays?: unknown; active?: boolean }) {
+  // Only the visible page of a carousel streams (every page used to autoplay, unmuted,
+  // at once), and playback pauses while another screen covers this one. The source
+  // loads lazily so an off-screen page's player doesn't buffer from the network.
+  const focused = useIsFocused();
+  const shouldPlay = active && focused;
+  const loaded = useRef(false);
+  const player = useVideoPlayer(null, (p) => {
     p.loop = true;
     p.muted = false;
-    p.play();
   });
+  useEffect(() => {
+    if (shouldPlay && !loaded.current) {
+      loaded.current = true;
+      player
+        .replaceAsync(uri)
+        .then(() => player.play())
+        .catch(() => {
+          loaded.current = false;
+        });
+    } else if (shouldPlay) {
+      player.play();
+    } else {
+      player.pause();
+    }
+  }, [shouldPlay, player, uri]);
   const parsed = useMemo(() => parseVideoOverlays(overlays), [overlays]);
   const [box, setBox] = useState({ w: 0, h: 0 });
   return (

@@ -43,13 +43,13 @@ export async function getUserStories(userId: string): Promise<Story[]> {
   const { data, error } = await supabase.rpc('get_user_stories', { _user_id: userId });
   if (error) throw error;
   const stories = (data ?? []) as Story[];
-  const paths = stories.flatMap((s) => [s.media_url, s.thumbnail_url]).filter((p) => p && isStoragePath(p));
+  // Only media_url is displayed by the viewer — thumbnails were signed and never used.
+  const paths = stories.map((s) => s.media_url).filter((p) => p && isStoragePath(p));
   if (paths.length === 0) return stories;
   const signed = await signMediaPaths(paths);
   return stories.map((s) => ({
     ...s,
     media_url: signed.get(s.media_url) ?? s.media_url,
-    thumbnail_url: signed.get(s.thumbnail_url) ?? s.thumbnail_url,
   }));
 }
 

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { DeckCard, FetchBatch } from '@/lib/deck';
-import { resolveDeckMedia } from '@/lib/media';
+import { resolveThumbMedia } from '@/lib/media';
 import { getCurrentCoords } from '@/lib/location';
 import { supabase } from '@/lib/supabase';
 
@@ -161,7 +161,8 @@ export async function searchPosts(
     _category: category,
   });
   if (error) throw error;
-  return (await resolveDeckMedia((data ?? []) as DeckCard[])) as SearchPost[];
+  // Thumbnail-only: the results grid never renders full-bleed media or carousels.
+  return (await resolveThumbMedia((data ?? []) as DeckCard[])) as SearchPost[];
 }
 
 /**
@@ -230,7 +231,8 @@ export async function getTagMeta(name: string): Promise<TagMeta | null> {
 export async function searchPostsByTag(name: string, offset = 0, limit = PAGE): Promise<SearchPost[]> {
   const { data, error } = await supabase.rpc('search_posts_by_tag', { _name: name, _limit: limit, _offset: offset });
   if (error) throw error;
-  return resolveDeckMedia((data ?? []) as DeckCard[]);
+  // Thumbnail-only: the tag grid never renders full-bleed media or carousels.
+  return resolveThumbMedia((data ?? []) as DeckCard[]) as Promise<SearchPost[]>;
 }
 export async function followTag(name: string): Promise<void> {
   const { error } = await supabase.rpc('follow_tag', { _name: name });

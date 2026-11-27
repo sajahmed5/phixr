@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { mediaSource } from '@/lib/media';
 import type { SuggestedAccount } from '@/types';
 
 type Props = {
@@ -77,7 +78,7 @@ export function SuggestedAccountCard({ account, thumbnails, busy, onToggleFollow
           {thumbnails.slice(0, 3).map((uri, i) => (
             <Image
               key={`${account.id}-${i}`}
-              source={{ uri }}
+              source={mediaSource(uri)}
               style={[styles.thumb, { backgroundColor: theme.backgroundSelected }]}
               contentFit="cover"
             />

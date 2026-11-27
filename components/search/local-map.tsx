@@ -11,7 +11,7 @@ import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
 import { getVenueBusiness, recordBusinessInsight, type VenueBusiness } from '@/lib/business';
 import { decodeCell } from '@/lib/location';
-import { signMediaPaths } from '@/lib/media';
+import { mediaSource, signMediaPaths } from '@/lib/media';
 import {
   getCellPosts,
   getMapPins,
@@ -333,7 +333,7 @@ export function LocalMap({ query, category }: { query: string; category: SearchC
             <View style={styles.thumbRow}>
               {cardPosts.slice(0, 4).map((p) => (
                 <Pressable key={p.id} onPress={() => router.push(`/post/${p.id}`)} style={styles.thumbWrap}>
-                  <Image source={{ uri: p.signed }} style={styles.thumb} contentFit="cover" />
+                  <Image source={mediaSource(p.signed)} style={styles.thumb} contentFit="cover" />
                 </Pressable>
               ))}
             </View>

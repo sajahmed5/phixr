@@ -22,6 +22,7 @@ import { FormMessage } from '@/components/ui/form-message';
 import { TextField } from '@/components/ui/text-field';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
+import { mediaSource } from '@/lib/media';
 import { getPostForEdit, updatePost, type EditablePost } from '@/lib/posts';
 
 const CAPTION_MAX = 2200;
@@ -99,7 +100,7 @@ export default function EditPostScreen() {
         <ScrollView
           contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 96 }]}
           keyboardShouldPersistTaps="handled">
-          <Image source={{ uri: post.media_url }} style={styles.preview} contentFit="cover" />
+          <Image source={mediaSource(post.media_url)} style={styles.preview} contentFit="cover" />
           <ThemedText type="small" themeColor="textSecondary">
             The media can&apos;t be changed — edit the details below.
           </ThemedText>

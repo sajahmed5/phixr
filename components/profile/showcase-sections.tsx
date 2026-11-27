@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/ui/text-field';
 import { BRAND } from '@/constants/config';
 import { useTheme } from '@/hooks/use-theme';
-import { signMediaPaths } from '@/lib/media';
+import { mediaSource, signMediaPaths } from '@/lib/media';
 import {
   createHighlight, deleteHighlight, getHighlightItems, getHighlights,
   getProfileLinks, recordLinkTap,
@@ -107,7 +107,7 @@ export function HighlightsRail({ userId, isOwner }: { userId: string; isOwner: b
             accessibilityLabel={`Highlight ${h.name}`}
             style={styles.highlight}>
             {h.cover_url && covers.get(h.cover_url) ? (
-              <Image source={{ uri: covers.get(h.cover_url)! }} style={[styles.circle, { borderColor: theme.border }]} contentFit="cover" />
+              <Image source={mediaSource(covers.get(h.cover_url))} style={[styles.circle, { borderColor: theme.border }]} contentFit="cover" />
             ) : (
               <View style={[styles.circle, styles.circleEmpty, { borderColor: theme.border }]}>
                 <Ionicons name="images-outline" size={18} color={theme.textSecondary} />
@@ -136,7 +136,7 @@ export function HighlightsRail({ userId, isOwner }: { userId: string; isOwner: b
               <ThemedText type="smallBold" style={styles.viewerTitle}>
                 {open?.name} · {idx + 1}/{items.length}
               </ThemedText>
-              <Image source={{ uri: items[idx].signed }} style={styles.viewerImage} contentFit="contain" />
+              <Image source={mediaSource(items[idx].signed)} style={styles.viewerImage} contentFit="contain" />
               {items[idx].overlay_text ? (
                 <ThemedText type="default" style={styles.viewerOverlay}>
                   {items[idx].overlay_text}

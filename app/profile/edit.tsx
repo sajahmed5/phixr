@@ -83,16 +83,20 @@ export default function EditProfileScreen() {
   }
 
   async function uploadAvatar(uri: string): Promise<string> {
-    // Downscale to a square-ish 512 then upload to the public avatars bucket.
+    // Downscale then upload to the public avatars bucket. 320px covers the largest use
+    // (the 84pt profile header at @3x ≈ 252px); 512 was ~3x the bytes for every avatar
+    // shown in lists at 24–48pt, and each one is Supabase egress on a cache miss.
     const ctx = ImageManipulator.ImageManipulator.manipulate(uri);
-    ctx.resize({ width: 512 });
+    ctx.resize({ width: 320 });
     const ref = await ctx.renderAsync();
-    const out = await ref.saveAsync({ compress: 0.85, format: ImageManipulator.SaveFormat.JPEG });
+    const out = await ref.saveAsync({ compress: 0.8, format: ImageManipulator.SaveFormat.JPEG });
     const bytes = await (await fetch(out.uri)).arrayBuffer();
     const path = `${user!.id}/avatar_${Date.now()}.jpg`;
+    // The filename is unique per upload (never overwritten), so it can be cached for a
+    // year — the default is 1 hour, which made CDNs and clients re-fetch constantly.
     const { error: upErr } = await supabase.storage
       .from('avatars')
-      .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
+      .upload(path, bytes, { contentType: 'image/jpeg', upsert: true, cacheControl: '31536000' });
     if (upErr) throw upErr;
     return supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
   }
