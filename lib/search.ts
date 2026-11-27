@@ -93,12 +93,17 @@ export type MapPin = {
   cell: string | null;
   /** Stage 1 (pin budget): when the venue's newest matching post was made. */
   last_post_at: string | null;
+  /** Venue rows: the best-liked matching post's thumbnail (a storage path to
+   *  sign), shown as a photo pin at street zoom. */
+  thumb_path?: string | null;
 };
 
-export async function getMapPins(q: string, category: SearchCategory): Promise<MapPin[]> {
+/** `since` (ISO time): only posts made after it — the map's "This week". */
+export async function getMapPins(q: string, category: SearchCategory, since: string | null = null): Promise<MapPin[]> {
   const { data, error } = await supabase.rpc('get_map_pins', {
     _q: q.trim() || null,
     _category: category,
+    _since: since,
   });
   if (error) throw error;
   return (data ?? []) as MapPin[];
