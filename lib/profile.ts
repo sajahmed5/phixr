@@ -529,6 +529,33 @@ export async function changePassword(newPassword: string): Promise<void> {
   if (error) throw error;
 }
 
+/** The signed-in login email, plus a change still waiting for confirmation (if any). */
+export async function getLoginEmail(): Promise<{ email: string | null; pending: string | null }> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  return { email: data.user?.email ?? null, pending: data.user?.new_email ?? null };
+}
+
+/**
+ * Start an email change. Nothing changes yet: "Secure email change" is on for the
+ * project, so Supabase emails a confirmation link to BOTH the current and the new
+ * address, and the switch happens only once both are tapped (the links land on
+ * /auth/confirm). Until then the person still logs in with the old address. Calling it
+ * again with the same address re-sends the links.
+ */
+export async function changeEmail(newEmail: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ email: newEmail.trim().toLowerCase() });
+  if (!error) return;
+  const msg = error.message.toLowerCase();
+  if (error.code === 'email_exists' || msg.includes('already been registered')) {
+    throw new Error('That email is already used by another Phixr account.');
+  }
+  if (error.code === 'over_email_send_rate_limit' || msg.includes('rate limit')) {
+    throw new Error('Too many emails sent just now. Wait a few minutes and try again.');
+  }
+  throw error;
+}
+
 /**
  * Kick off a data export. The `data-export` Edge Function builds a JSON archive
  * (profile, posts, comments, follows) plus signed download links for every media object,

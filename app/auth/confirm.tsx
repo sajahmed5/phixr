@@ -24,7 +24,7 @@ export default function ConfirmEmailScreen() {
   const router = useRouter();
   const { token_hash: tokenHash, type } = useLocalSearchParams<{ token_hash?: string; type?: string }>();
   const ran = useRef(false);
-  const [state, setState] = useState<'working' | 'done' | 'failed'>('working');
+  const [state, setState] = useState<'working' | 'done' | 'half' | 'failed'>('working');
 
   useEffect(() => {
     if (ran.current) return;
@@ -35,9 +35,15 @@ export default function ConfirmEmailScreen() {
         setState('failed');
         return;
       }
-      const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: otpType });
+      const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: otpType });
       if (error) {
         setState('failed');
+        return;
+      }
+      // Email change with "Secure email change" on: BOTH addresses get a link, and the
+      // first one tapped is accepted without finishing the change (no session comes back).
+      if (otpType === 'email_change' && !data.session) {
+        setState('half');
         return;
       }
       track('email_verified');
@@ -56,6 +62,19 @@ export default function ConfirmEmailScreen() {
         subtitle="It may have expired or already been used. If you’ve already confirmed your email, just log in.">
         <View style={{ gap: 12 }}>
           <Button title="Log in" onPress={() => router.replace('/(auth)/login')} />
+        </View>
+      </AuthScreen>
+    );
+  }
+
+  if (state === 'half') {
+    return (
+      <AuthScreen
+        brand
+        title="One more step"
+        subtitle="That address is confirmed. Now tap the link we sent to your other email address to finish changing your login email.">
+        <View style={{ gap: 12 }}>
+          <Button title="Back to Phixr" onPress={() => router.replace('/(tabs)')} />
         </View>
       </AuthScreen>
     );
