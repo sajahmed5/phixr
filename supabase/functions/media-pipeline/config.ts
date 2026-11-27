@@ -20,7 +20,7 @@
 //     MODERATION_VIOLENCE_REJECT_AT   default 5
 //   Limits:
 //     MEDIA_MAX_IMAGE_BYTES           default 15728640  (15 MB)
-//     MEDIA_MAX_VIDEO_BYTES           default 104857600 (100 MB)
+//     MEDIA_MAX_VIDEO_BYTES           default 47185920 (45 MB — see limits below)
 //     MEDIA_MAX_VIDEO_SECONDS         default 60
 //     MEDIA_UPLOADS_PER_HOUR          default 20
 //   Tagging:
@@ -81,7 +81,11 @@ export const config = {
     // Supabase edge isolate handles ~4.5 MP and OOMs by ~6 MP, so 4 leaves margin
     // (HEIC decode via libheif is heavier than JPEG). Tune per memory tier.
     maxImageMegapixels: num('MEDIA_MAX_IMAGE_MEGAPIXELS', 4),
-    maxVideoBytes: num('MEDIA_MAX_VIDEO_BYTES', 100 * 1024 * 1024),
+    // Measured 2026-11-27: the project's storage upload limit is 50 MB (a 57 MB clip was
+    // refused by media-staging) and the edge isolate runs out of memory reading a ~70 MB
+    // body. 45 MB stays clear of both. The app compresses video to 1080p/5 Mbps first
+    // (a 60 s clip ≈ 40 MB), so this only catches uncompressed outliers.
+    maxVideoBytes: num('MEDIA_MAX_VIDEO_BYTES', 45 * 1024 * 1024),
     maxVideoSeconds: num('MEDIA_MAX_VIDEO_SECONDS', 60),
     uploadsPerHour: num('MEDIA_UPLOADS_PER_HOUR', 20),
   },

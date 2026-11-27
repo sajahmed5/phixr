@@ -82,6 +82,7 @@
     },
     "plugins": [
       "expo-router",
+      "react-native-compressor",
       "expo-secure-store",
       "expo-video",
       "expo-localization",
