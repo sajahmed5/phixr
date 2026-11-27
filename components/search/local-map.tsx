@@ -61,6 +61,10 @@ import {
  * tapping one opens the photos from that part. Posts with no place tag carry
  * their ~300m square too (kept only if near the area picked), so area pins
  * split into squares as you zoom in and merge back as you zoom out.
+ *
+ * Extras: zoomed in, the top venue pins carry their best-liked photo (the map
+ * reads like a gallery), and a "This week" toggle limits every pin to the
+ * last 7 days so a park shows this season.
  */
 
 /** Stage 1 budget: at most this many venue pins in view at once. */
@@ -73,6 +77,11 @@ const STREET_ZOOM_DELTA = 0.04;
 /** Stage 3: below this latitudeDelta (~1.3km tall viewport) big venues split
  *  into ~300m areas. */
 const PART_ZOOM_DELTA = 0.012;
+/** Photo pins: below this latitudeDelta (~2.2km tall) the best-ranked venue
+ *  pins carry their best-liked photo, at most MAX_PHOTO_PINS at once. */
+const PHOTO_ZOOM_DELTA = 0.02;
+const MAX_PHOTO_PINS = 10;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 /** Stage 2: at most this many hollow "be the first" pins, and only in budget
  *  slots the photo pins leave free. */
 const MAX_SUGGESTED = 8;
@@ -206,6 +215,10 @@ export function LocalMap({
   // session so panning back costs nothing.
   const [suggestCache, setSuggestCache] = useState<Record<string, PlaceSuggestion[]>>({});
   const wantsSuggestions = !!(query.trim() || category);
+  // "This week": every photo pin limited to the last 7 days.
+  const [thisWeek, setThisWeek] = useState(false);
+  // Signed URLs for photo pins, by storage path (kept for the session).
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
 
   const venuePins = useMemo(
     () => (pins ?? []).filter((p): p is VenuePin => p.kind === 'venue' && p.lat != null && p.lon != null),
@@ -232,7 +245,8 @@ export function LocalMap({
 
   useEffect(() => {
     let alive = true;
-    void getMapPins(query, category)
+    const since = thisWeek ? new Date(Date.now() - WEEK_MS).toISOString() : null;
+    void getMapPins(query, category, since)
       .then((ps) => {
         if (!alive) return;
         setSelected(null); // a new search invalidates the open card
@@ -265,7 +279,7 @@ export function LocalMap({
     return () => {
       alive = false;
     };
-  }, [query, category]);
+  }, [query, category, thisWeek]);
 
   // Stage 2: fetch suggested places for the settled street-zoom viewport.
   const suggestKey = useMemo(() => {
@@ -408,6 +422,41 @@ export function LocalMap({
     [budgeted, region],
   );
 
+  // Photo pins: zoomed in, the best-ranked single venue pins (budget order)
+  // show their best-liked photo — venue id → thumbnail storage path.
+  const photoPins = useMemo(() => {
+    const out = new Map<string, string>();
+    if (!region || region.latitudeDelta >= PHOTO_ZOOM_DELTA) return out;
+    const singles = new Set(clusters.filter((c) => c.venues.length === 1).map((c) => c.venues[0].id));
+    for (const v of budgeted) {
+      if (out.size >= MAX_PHOTO_PINS) break;
+      if (singles.has(v.id) && v.thumb_path) out.set(v.id, v.thumb_path);
+    }
+    return out;
+  }, [region, clusters, budgeted]);
+
+  useEffect(() => {
+    const missing = [...new Set(photoPins.values())].filter((p) => !thumbUrls[p]);
+    if (missing.length === 0) return;
+    void signMediaPaths(missing)
+      .then((signed) =>
+        setThumbUrls((cur) => {
+          const next = { ...cur };
+          for (const p of missing) {
+            const url = signed.get(p);
+            if (url) next[p] = url;
+          }
+          return next;
+        }),
+      )
+      .catch(() => {});
+  }, [photoPins, thumbUrls]);
+
+  const photoUri = (v: VenuePin): string | undefined => {
+    const path = photoPins.get(v.id);
+    return path ? thumbUrls[path] : undefined;
+  };
+
   // Stage 3: zoomed right in, a budgeted venue whose photos span 2+ areas
   // (a park) also shows a small count bubble per ~300m area, so you can see
   // which part of it people photographed. Parts ride on their venue's budget
@@ -478,10 +527,13 @@ export function LocalMap({
     return (
       <View style={styles.center}>
         <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
-          {query.trim() || category
-            ? 'Nothing matching this search has a location yet.'
-            : 'No located posts in your area yet — pictures tagged with a place show up here.'}
+          {thisWeek
+            ? 'Nothing posted around here this week.'
+            : query.trim() || category
+              ? 'Nothing matching this search has a location yet.'
+              : 'No located posts in your area yet — pictures tagged with a place show up here.'}
         </ThemedText>
+        {thisWeek ? <Button title="Show all time" variant="secondary" onPress={() => setThisWeek(false)} /> : null}
       </View>
     );
   }
@@ -550,6 +602,14 @@ export function LocalMap({
               coordinate={{ latitude: c.venues[0].lat, longitude: c.venues[0].lon }}
               onPress={() => void openVenue(c.venues[0])}>
               <View style={styles.pinCol}>
+                {photoUri(c.venues[0]) ? (
+                  <Image
+                    source={mediaSource(photoUri(c.venues[0]))}
+                    style={[styles.photoPin, { borderColor: c.venues[0].is_business ? BRAND.accent : '#fff' }]}
+                    contentFit="cover"
+                    accessibilityIgnoresInvertColors
+                  />
+                ) : null}
                 <View style={[styles.venuePin, c.venues[0].is_business ? styles.bizPin : styles.gemPin]}>
                   <Ionicons
                     name={c.venues[0].is_business ? 'storefront' : 'location'}
@@ -632,12 +692,32 @@ export function LocalMap({
         )}
       </MapView>
 
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Only photos from this week"
+        accessibilityState={{ selected: thisWeek }}
+        hitSlop={8}
+        onPress={() => setThisWeek((w) => !w)}
+        style={[
+          styles.weekChip,
+          thisWeek
+            ? { backgroundColor: BRAND.accent, borderColor: BRAND.accent }
+            : { backgroundColor: theme.background, borderColor: theme.border },
+        ]}>
+        <Ionicons name="calendar-outline" size={14} color={thisWeek ? '#fff' : theme.text} />
+        <ThemedText type="smallBold" style={{ color: thisWeek ? '#fff' : theme.text }}>
+          This week
+        </ThemedText>
+      </Pressable>
+
       {noPhotoPins && !selected ? (
         <View style={[styles.hint, { backgroundColor: theme.background, borderColor: theme.border }]}>
           <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
-            {region && region.latitudeDelta < STREET_ZOOM_DELTA
-              ? 'No photos match yet — these are places nearby. Be the first to post one.'
-              : 'No photos match yet — zoom in to see places nearby.'}
+            {thisWeek
+              ? 'Nothing posted here this week — turn off This week to see everything.'
+              : region && region.latitudeDelta < STREET_ZOOM_DELTA
+                ? 'No photos match yet — these are places nearby. Be the first to post one.'
+                : 'No photos match yet — zoom in to see places nearby.'}
           </ThemedText>
         </View>
       ) : null}
@@ -812,7 +892,7 @@ const HOLLOW_INK = '#5F5C57';
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
   centerText: { textAlign: 'center' },
   pinCol: { alignItems: 'center' },
   venuePin: {
@@ -887,9 +967,29 @@ const styles = StyleSheet.create({
     maxWidth: 150,
   },
   hollowText: { color: HOLLOW_INK, fontSize: 12, lineHeight: 15 },
-  hint: {
+  // Best-liked photo above a venue's name chip at street zoom.
+  photoPin: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 2.5,
+    marginBottom: 3,
+  },
+  weekChip: {
     position: 'absolute',
     top: 10,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  hint: {
+    position: 'absolute',
+    top: 54,
     left: 12,
     right: 12,
     borderRadius: 12,
