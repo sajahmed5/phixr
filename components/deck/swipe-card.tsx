@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Canvas, LinearGradient, Rect, vec } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { memo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +13,8 @@ import { AdOverlay } from '@/components/deck/ad-overlay';
 import { BRAND, TAB_BAR_CLEARANCE } from '@/constants/config';
 import type { DeckCard } from '@/lib/deck';
 import { formatCount } from '@/lib/format';
+import { isOpenablePlace, placeHref } from '@/lib/places';
+import { formatRelative } from '@/lib/relative-time';
 
 /**
  * Presentational card: full-bleed media + overlays. Used for both the interactive top
@@ -50,6 +53,7 @@ export const SwipeCard = memo(function SwipeCard({
   hideCounts?: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [scrimBox, setScrimBox] = useState({ w: 0, h: 0 });
   // Sensitive cover (6B): covered until the viewer taps. Server never sends
   // sensitive cards to minors, so reaching here means an adult viewer.
@@ -201,19 +205,40 @@ export const SwipeCard = memo(function SwipeCard({
           </View>
         </Pressable>
 
+        {/* Where + when, under the poster (27 Nov). Tappable on the top card only,
+            like the tags; opens the place page. */}
+        <Pressable
+          onPress={
+            isActive && card.place && isOpenablePlace(card.place)
+              ? () => router.push(placeHref(card.place!))
+              : undefined
+          }
+          disabled={!isActive || !card.place || !isOpenablePlace(card.place)}
+          hitSlop={6}
+          accessibilityRole={card.place ? 'link' : undefined}
+          accessibilityLabel={card.place ? `Open ${card.place.label}` : undefined}
+          style={({ pressed }) => [styles.placePill, pressed && { opacity: 0.7 }]}>
+          {card.place ? (
+            <>
+              <Ionicons name={card.place.isBusiness ? 'storefront' : 'location'} size={12} color="#fff" />
+              <ThemedText type="smallBold" style={styles.onMedia} numberOfLines={1}>
+                {card.place.label}
+              </ThemedText>
+              <ThemedText type="small" style={styles.onMediaDim}>
+                · {formatRelative(card.created_at)}
+              </ThemedText>
+            </>
+          ) : (
+            <ThemedText type="small" style={styles.onMediaDim}>
+              {formatRelative(card.created_at)}
+            </ThemedText>
+          )}
+        </Pressable>
+
         {card.caption ? (
           <ThemedText type="default" style={styles.onMedia} numberOfLines={3}>
             {card.caption}
           </ThemedText>
-        ) : null}
-
-        {card.location_label ? (
-          <View style={styles.locationRow}>
-            <Ionicons name="location-outline" size={13} color="#fff" />
-            <ThemedText type="small" style={styles.onMediaDim} numberOfLines={1}>
-              {card.location_label}
-            </ThemedText>
-          </View>
         ) : null}
 
         {card.tags.length > 0 ? (
@@ -343,6 +368,16 @@ const styles = StyleSheet.create({
   onMedia: { color: '#fff', ...textShadow },
   onMediaDim: { color: 'rgba(255,255,255,0.85)' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 10, rowGap: 4 },
-  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  placePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
   tag: { color: '#FF9D2E', ...textShadow },
 });

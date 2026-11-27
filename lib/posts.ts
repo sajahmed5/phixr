@@ -1,4 +1,5 @@
 import { signMediaPaths } from '@/lib/media';
+import { getPostPlaces, type PostPlace } from '@/lib/places';
 import { supabase } from '@/lib/supabase';
 import { findOrCreateTag } from '@/lib/tags';
 
@@ -97,6 +98,10 @@ export type PostDetail = {
   overlays: unknown;
   /** Display name of the tagged place, if the poster attached one (#61). */
   location_label: string | null;
+  /** Where it was, resolved for display + the place page (null = nothing to say). */
+  place: PostPlace | null;
+  /** When it was posted — shown under the place (Saj chose posted, not taken, date). */
+  created_at: string;
 };
 
 /** Load a single post for the read-only viewer, with counts + tags. RLS hides ones you can't see. */
@@ -104,7 +109,7 @@ export async function getPostDetail(id: string): Promise<PostDetail | null> {
   const { data, error } = await supabase
     .from('posts')
     .select(
-      'id, media_url, media_type, caption, visibility, sensitive, like_count, skip_count, comment_count, user_id, overlays, location_label, profiles!posts_user_id_fkey(handle, display_name), post_tags(tags(name))',
+      'id, media_url, media_type, caption, visibility, sensitive, like_count, skip_count, comment_count, user_id, overlays, location_label, created_at, profiles!posts_user_id_fkey(handle, display_name), post_tags(tags(name))',
     )
     .eq('id', id)
     .maybeSingle();
@@ -133,7 +138,11 @@ export async function getPostDetail(id: string): Promise<PostDetail | null> {
       return t?.name ?? null;
     })
     .filter((n): n is string => !!n);
-  const signed = await signMediaPaths([row.media_url]);
+  const [signed, places] = await Promise.all([
+    signMediaPaths([row.media_url]),
+    // A failed place lookup costs the location row, never the post.
+    getPostPlaces([row.id]).catch(() => new Map<string, PostPlace>()),
+  ]);
   // My own swipe on this post (own rows only under RLS) → drives the like/skip toggle.
   const { data: auth } = await supabase.auth.getUser();
   let myDirection: 'left' | 'right' | null = null;
@@ -163,6 +172,8 @@ export async function getPostDetail(id: string): Promise<PostDetail | null> {
     my_direction: myDirection,
     overlays: (row as Record<string, unknown>).overlays ?? [],
     location_label: ((row as Record<string, unknown>).location_label as string | null) ?? null,
+    place: places.get(row.id) ?? null,
+    created_at: (row as Record<string, unknown>).created_at as string,
   };
 }
 

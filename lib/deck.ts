@@ -1,4 +1,5 @@
 import { signMediaPaths } from '@/lib/media';
+import { getPostPlaces, type PostPlace } from '@/lib/places';
 import { supabase } from '@/lib/supabase';
 
 /** A card returned by the `get_deck` RPC. */
@@ -22,6 +23,8 @@ export type DeckCard = {
   feed_like_count?: number;
   /** Tagged place name, merged client-side by withLocationLabels (#65). */
   location_label?: string | null;
+  /** Resolved place (label + venue/area) for the feed pill and place page. */
+  place?: PostPlace | null;
   /** Whether the caller has hearted this post in the friends feed. */
   my_feed_like?: boolean;
   /** Total media items (1 = single). >1 means a carousel; set by resolveDeckMedia. */
@@ -116,22 +119,20 @@ export async function fetchDiscover(limit = 30): Promise<DeckCard[]> {
 }
 
 /**
- * Attach posts.location_label to a batch of cards in one visible-ids select (#65).
- * The deck RPCs predate the column; a client-side merge keeps their 300-line
- * ranking bodies untouched. RLS applies, and a failure costs only the pins.
+ * Attach each card's resolved place in one batched call (#65, 27 Nov). The deck
+ * RPCs predate places; a client-side merge keeps their 300-line ranking bodies
+ * untouched. RLS applies, and a failure costs only the pins, never the feed.
  */
 async function withLocationLabels(cards: DeckCard[]): Promise<DeckCard[]> {
   if (cards.length === 0) return cards;
   try {
-    const { data } = await supabase
-      .from('posts')
-      .select('id, location_label')
-      .in('id', cards.map((c) => c.id))
-      .not('location_label', 'is', null);
-    const labels = new Map((data ?? []).map((r) => [r.id as string, r.location_label as string]));
-    return labels.size === 0
+    const places = await getPostPlaces(cards.map((c) => c.id));
+    return places.size === 0
       ? cards
-      : cards.map((c) => ({ ...c, location_label: labels.get(c.id) ?? null }));
+      : cards.map((c) => {
+          const place = places.get(c.id) ?? null;
+          return { ...c, place, location_label: place?.label ?? null };
+        });
   } catch {
     return cards;
   }

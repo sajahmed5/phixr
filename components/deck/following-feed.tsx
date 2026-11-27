@@ -35,6 +35,7 @@ import { getBookmarkState } from '@/lib/bookmarks';
 import { fetchFollowingFeed, toggleFeedLike, type DeckCard } from '@/lib/deck';
 import { formatCount } from '@/lib/format';
 import { mediaSource, resolveDeckMedia } from '@/lib/media';
+import { isOpenablePlace, placeHref } from '@/lib/places';
 import { formatRelative } from '@/lib/relative-time';
 import { getMuted, setMutedPreference, subscribeMute } from '@/lib/mute-preference';
 import { cachedVideoUri } from '@/lib/video-cache';
@@ -340,13 +341,18 @@ const FeedCard = memo(function FeedCard({
         </MentionText>
       ) : null}
 
-      {card.location_label ? (
-        <View style={styles.locationRow}>
-          <Ionicons name="location-outline" size={13} color={theme.textSecondary} />
-          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-            {card.location_label}
+      {card.place ? (
+        <Pressable
+          onPress={isOpenablePlace(card.place) ? () => router.push(placeHref(card.place!)) : undefined}
+          disabled={!isOpenablePlace(card.place)}
+          accessibilityRole="link"
+          accessibilityLabel={`Open ${card.place.label}`}
+          style={({ pressed }) => [styles.locationRow, pressed && { opacity: 0.6 }]}>
+          <Ionicons name={card.place.isBusiness ? 'storefront' : 'location'} size={13} color={BRAND.accent} />
+          <ThemedText type="small" style={{ color: theme.text, fontWeight: '600' }} numberOfLines={1}>
+            {card.place.label}
           </ThemedText>
-        </View>
+        </Pressable>
       ) : null}
 
       {card.tags.length > 0 ? (
